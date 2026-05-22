@@ -824,8 +824,10 @@ async function loadData() {
   STATE.overview = await ovRes.json();
   STATE.agg = await agRes.json();
 
-  // 필터 기본값: 전체 선택
-  STATE.agg.years.forEach(y => STATE.filters.years.add(y));
+  // 필터 기본값: 전체 선택 (단 진행 중 연도 2026은 데이터가 3월까지뿐이라 기본 제외)
+  STATE.agg.years.forEach(y => {
+    if (y !== 2026) STATE.filters.years.add(y);
+  });
   STATE.agg.media_types.forEach(m => STATE.filters.mtypes.add(m));
   STATE.agg.agency_types.forEach(a => STATE.filters.atypes.add(a));
 
@@ -879,7 +881,7 @@ function renderKPI() {
 function renderFilters() {
   const ag = STATE.agg;
   const wrapHTML = (items, set) =>
-    items.map(v => `<button class="chip active" data-v="${v}">${v}</button>`).join('');
+    items.map(v => `<button class="chip${set.has(v) ? ' active' : ''}" data-v="${v}">${v}</button>`).join('');
 
   const ye = document.getElementById('filter-years');
   ye.innerHTML = wrapHTML(ag.years, STATE.filters.years);
