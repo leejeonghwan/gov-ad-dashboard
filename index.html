@@ -260,6 +260,61 @@
   }
   .placeholder-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 
+  /* ============ LOGIN GATE ============ */
+  .login-gate {
+    display: flex; justify-content: center; align-items: flex-start;
+    padding: 60px 24px 80px;
+  }
+  .login-card {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 12px; padding: 36px 32px;
+    width: 100%; max-width: 420px;
+    box-shadow: 0 4px 24px var(--shadow);
+  }
+  .login-title {
+    font-size: 22px; font-weight: 700; color: var(--text);
+    margin-bottom: 6px; letter-spacing: -0.01em;
+  }
+  .login-sub {
+    font-size: 13px; color: var(--text-muted);
+    margin-bottom: 24px; line-height: 1.5;
+  }
+  .login-form { display: flex; flex-direction: column; gap: 10px; }
+  .login-form input {
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 12px 14px; font-size: 14px;
+    border-radius: 6px; font-family: inherit; outline: none;
+    transition: border-color 0.15s;
+  }
+  .login-form input:focus { border-color: var(--accent); }
+  .login-form input::placeholder { color: var(--text-dim); }
+  .login-submit {
+    background: var(--accent); color: #fff;
+    border: none; padding: 12px; font-size: 14px;
+    border-radius: 6px; cursor: pointer; font-weight: 600;
+    font-family: inherit; margin-top: 6px;
+    transition: opacity 0.15s;
+  }
+  .login-submit:hover { opacity: 0.9; }
+  .login-submit:disabled { opacity: 0.5; cursor: wait; }
+  .login-error {
+    background: color-mix(in srgb, var(--red) 12%, transparent);
+    border: 1px solid var(--red); color: var(--red);
+    padding: 10px 12px; border-radius: 6px;
+    font-size: 12px; margin-top: 8px;
+  }
+  .login-foot {
+    margin-top: 18px; font-size: 11px; color: var(--text-dim);
+    text-align: center; line-height: 1.6;
+  }
+  .logout-btn {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    color: var(--text-muted); padding: 5px 10px; font-size: 11px;
+    border-radius: 5px; cursor: pointer; font-family: inherit;
+    margin-left: 8px;
+  }
+  .logout-btn:hover { color: var(--text); border-color: var(--text-muted); }
+
   /* ============ RAW TABLE ============ */
   .raw-table-card { margin-top: 20px; }
   .raw-table-header {
@@ -386,6 +441,7 @@
           <span class="theme-toggle-icon" id="theme-toggle-icon">☾</span>
           <span id="theme-toggle-label">라이트 모드.</span>
         </button>
+        <button class="logout-btn" id="logout-btn" style="display:none">로그아웃.</button>
       </div>
     </div>
   </div>
@@ -468,34 +524,68 @@
 
   <!-- ===== AGENCY TAB ===== -->
   <section class="panel" id="panel-agency">
-    <h2 class="section-title">광고주(기관) 검색.</h2>
-    <div class="search-box">
-      <input type="text" class="search-input" id="search-agency"
-        placeholder="기관명을 검색하세요 (예: 보건복지부, 서울특별시청, 한국전력공사)" autocomplete="off">
-      <div class="suggestions" id="suggestions-agency"></div>
+    <!-- 로그인 게이트 (인증 안 됨 시) -->
+    <div class="login-gate" id="login-gate-agency">
+      <div class="login-card">
+        <h2 class="login-title">광고주별 분석.</h2>
+        <p class="login-sub">로그인 후 광고주별 집행 데이터와 세부 광고 내역을 볼 수 있습니다.</p>
+        <form class="login-form">
+          <input type="text" name="username" placeholder="아이디" autocomplete="username" required />
+          <input type="password" name="password" placeholder="비밀번호" autocomplete="current-password" required />
+          <button type="submit" class="login-submit">로그인.</button>
+          <div class="login-error" style="display:none">아이디 또는 비밀번호가 틀립니다.</div>
+        </form>
+        <div class="login-foot">접근 권한 문의는 운영자에게 연락 주세요.</div>
+      </div>
     </div>
-    <div id="detail-agency">
-      <div class="placeholder">
-        <div class="placeholder-icon">🔍</div>
-        <div>위 검색창에서 광고주를 선택하면.</div>
-        <div>해당 기관이 어느 매체에 얼마나 집행했는지 분석합니다.</div>
+    <!-- 보호된 컨텐츠 (인증 후 표시) -->
+    <div class="protected-content" id="protected-agency" style="display:none">
+      <h2 class="section-title">광고주(기관) 검색.</h2>
+      <div class="search-box">
+        <input type="text" class="search-input" id="search-agency"
+          placeholder="기관명을 검색하세요 (예: 보건복지부, 서울특별시청, 한국전력공사)" autocomplete="off">
+        <div class="suggestions" id="suggestions-agency"></div>
+      </div>
+      <div id="detail-agency">
+        <div class="placeholder">
+          <div class="placeholder-icon">🔍</div>
+          <div>위 검색창에서 광고주를 선택하면.</div>
+          <div>해당 기관이 어느 매체에 얼마나 집행했는지 분석합니다.</div>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- ===== MEDIA TAB ===== -->
   <section class="panel" id="panel-media">
-    <h2 class="section-title">매체 검색.</h2>
-    <div class="search-box">
-      <input type="text" class="search-input" id="search-media"
-        placeholder="매체명을 검색하세요 (예: 조선일보, KBS, 네이버)" autocomplete="off">
-      <div class="suggestions" id="suggestions-media"></div>
+    <!-- 로그인 게이트 -->
+    <div class="login-gate" id="login-gate-media">
+      <div class="login-card">
+        <h2 class="login-title">매체별 분석.</h2>
+        <p class="login-sub">로그인 후 매체별 수주 데이터와 세부 광고 내역을 볼 수 있습니다.</p>
+        <form class="login-form">
+          <input type="text" name="username" placeholder="아이디" autocomplete="username" required />
+          <input type="password" name="password" placeholder="비밀번호" autocomplete="current-password" required />
+          <button type="submit" class="login-submit">로그인.</button>
+          <div class="login-error" style="display:none">아이디 또는 비밀번호가 틀립니다.</div>
+        </form>
+        <div class="login-foot">접근 권한 문의는 운영자에게 연락 주세요.</div>
+      </div>
     </div>
-    <div id="detail-media">
-      <div class="placeholder">
-        <div class="placeholder-icon">🔍</div>
-        <div>위 검색창에서 매체를 선택하면.</div>
-        <div>해당 매체가 어느 기관에서 얼마나 수주했는지 분석합니다.</div>
+    <!-- 보호된 컨텐츠 -->
+    <div class="protected-content" id="protected-media" style="display:none">
+      <h2 class="section-title">매체 검색.</h2>
+      <div class="search-box">
+        <input type="text" class="search-input" id="search-media"
+          placeholder="매체명을 검색하세요 (예: 조선일보, KBS, 네이버)" autocomplete="off">
+        <div class="suggestions" id="suggestions-media"></div>
+      </div>
+      <div id="detail-media">
+        <div class="placeholder">
+          <div class="placeholder-icon">🔍</div>
+          <div>위 검색창에서 매체를 선택하면.</div>
+          <div>해당 매체가 어느 기관에서 얼마나 수주했는지 분석합니다.</div>
+        </div>
       </div>
     </div>
   </section>
@@ -530,7 +620,95 @@ const STATE = {
   charts: {},
   rawCache: new Map(),  // key: `agency-${idx}` / `media-${idx}` → fetched JSON
   rawToken: 0,          // 진입 race condition 방지
+  authed: false,
 };
+
+// ============ 인증 관리 ============
+const AUTH_KEY = 'adserver-auth';
+
+function getAuth() {
+  try { return sessionStorage.getItem(AUTH_KEY); } catch (_) { return null; }
+}
+function setAuth(v) {
+  try {
+    if (v) sessionStorage.setItem(AUTH_KEY, v);
+    else sessionStorage.removeItem(AUTH_KEY);
+  } catch (_) {}
+  STATE.authed = !!v;
+}
+
+function authFetch(url, opts = {}) {
+  const auth = getAuth();
+  const headers = { ...(opts.headers || {}) };
+  if (auth) headers['Authorization'] = auth;
+  return fetch(url, { ...opts, headers });
+}
+
+async function tryLogin(user, pass) {
+  const auth = 'Basic ' + btoa(unescape(encodeURIComponent(user + ':' + pass)));
+  try {
+    // 검증용: 가장 작은 보호 endpoint 호출
+    const res = await fetch('data/agency/0.json', {
+      headers: { 'Authorization': auth },
+      cache: 'no-store',
+    });
+    if (res.ok) { setAuth(auth); return true; }
+  } catch (e) { console.error('login fetch error', e); }
+  return false;
+}
+
+function logout() {
+  setAuth(null);
+  // 캐시 비우기 (다른 사람이 같은 브라우저 쓸 수도)
+  STATE.rawCache.clear();
+  // 선택된 entity 해제
+  STATE.selectedAgency = null;
+  STATE.selectedMedia = null;
+  updateGateUI();
+}
+
+function updateGateUI() {
+  const authed = !!getAuth();
+  STATE.authed = authed;
+  ['agency', 'media'].forEach(k => {
+    const gate = document.getElementById(`login-gate-${k}`);
+    const content = document.getElementById(`protected-${k}`);
+    if (gate) gate.style.display = authed ? 'none' : '';
+    if (content) content.style.display = authed ? '' : 'none';
+  });
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.style.display = authed ? '' : 'none';
+}
+
+function setupLoginForms() {
+  document.querySelectorAll('.login-form').forEach(form => {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const user = form.username.value.trim();
+      const pass = form.password.value;
+      const errEl = form.querySelector('.login-error');
+      const btn = form.querySelector('.login-submit');
+      const origText = btn.textContent;
+      errEl.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = '확인 중…';
+      const ok = await tryLogin(user, pass);
+      btn.disabled = false;
+      btn.textContent = origText;
+      if (ok) {
+        // 모든 form 입력 초기화
+        document.querySelectorAll('.login-form').forEach(f => f.reset());
+        updateGateUI();
+      } else {
+        errEl.style.display = '';
+        form.password.focus();
+        form.password.select();
+      }
+    });
+  });
+  const lb = document.getElementById('logout-btn');
+  if (lb) lb.addEventListener('click', logout);
+}
 
 // ============ 색상 / 테마 ============
 const SERIES_COLORS = ['#58a6ff', '#f78166', '#3fb950', '#d29922', '#bc8cff', '#f85149', '#79c0ff'];
@@ -1039,7 +1217,15 @@ async function appendRawTable(containerId, kind, idx, cols, subtitle, yearSet) {
   try {
     let raw = STATE.rawCache.get(cacheKey);
     if (!raw) {
-      const res = await fetch(`data/${kind}/${idx}.json`);
+      const res = await authFetch(`data/${kind}/${idx}.json`);
+      if (res.status === 401) {
+        // 세션 만료 또는 비밀번호 변경
+        setAuth(null);
+        updateGateUI();
+        card.querySelector('.raw-loading').innerHTML =
+          `<span style="color:var(--red)">인증이 만료됐습니다. 다시 로그인해주세요.</span>`;
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       raw = await res.json();
       STATE.rawCache.set(cacheKey, raw);
@@ -1446,6 +1632,8 @@ function renderMediaContent() {
     setupTabs();
     setupSearch('search-agency', 'suggestions-agency', STATE.agencyTotals, renderAgencyDetail);
     setupSearch('search-media', 'suggestions-media', STATE.mediaTotals, renderMediaDetail);
+    setupLoginForms();
+    updateGateUI();
     // layout flush 후 차트 그리기
     await new Promise(r => requestAnimationFrame(r));
     renderMarket();
