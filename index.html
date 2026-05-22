@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <style>
-  :root {
+  :root, :root[data-theme="dark"] {
     --bg: #0e1117;
     --bg-elev: #161b22;
     --bg-hover: #1f2630;
@@ -23,6 +23,31 @@
     --red: #f85149;
     --yellow: #d29922;
     --purple: #bc8cff;
+    --shadow: rgba(0,0,0,0.4);
+    --tooltip-bg: rgba(22,27,34,0.95);
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --bg-elev: #f6f8fa;
+    --bg-hover: #eef1f4;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-muted: #57606a;
+    --text-dim: #8b949e;
+    --accent: #0969da;
+    --accent-2: #cf222e;
+    --green: #1a7f37;
+    --red: #cf222e;
+    --yellow: #9a6700;
+    --purple: #8250df;
+    --shadow: rgba(0,0,0,0.08);
+    --tooltip-bg: rgba(255,255,255,0.98);
+  }
+  /* 테마 전환 시 부드럽게 */
+  html, body, .card, .kpi, .chip, .raw-table-wrap, .raw-table thead,
+  .raw-search, .search-input, .suggestions, .detail-header, .filters,
+  .theme-toggle {
+    transition: background-color 0.18s, border-color 0.18s, color 0.18s;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -61,6 +86,15 @@
   }
   .site-meta a { color: var(--text-muted); text-decoration: none; }
   .site-meta a:hover { color: var(--accent); }
+  .theme-toggle {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    color: var(--text-muted); padding: 6px 12px; font-size: 12px;
+    border-radius: 6px; cursor: pointer; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 6px; font-weight: 500;
+    margin-top: 8px;
+  }
+  .theme-toggle:hover { color: var(--text); border-color: var(--text-muted); }
+  .theme-toggle-icon { font-size: 14px; line-height: 1; }
 
   /* ============ KPI BAND ============ */
   .kpi-band {
@@ -338,6 +372,12 @@
     <div class="site-meta">
       2019 — 2026 / 한국언론진흥재단 정부광고 집행내역<br>
       <a href="https://www.kpf.or.kr" target="_blank">한국언론진흥재단</a>
+      <div>
+        <button class="theme-toggle" id="theme-toggle" aria-label="테마 전환">
+          <span class="theme-toggle-icon" id="theme-toggle-icon">☾</span>
+          <span id="theme-toggle-label">라이트 모드</span>
+        </button>
+      </div>
     </div>
   </div>
 </header>
@@ -483,12 +523,92 @@ const STATE = {
   rawToken: 0,          // 진입 race condition 방지
 };
 
-// ============ 색상 ============
+// ============ 색상 / 테마 ============
 const SERIES_COLORS = ['#58a6ff', '#f78166', '#3fb950', '#d29922', '#bc8cff', '#f85149', '#79c0ff'];
-const ECHARTS_BASE = {
-  textStyle: { fontFamily: '"Inter","Noto Sans KR",sans-serif', color: '#e6edf3' },
-  backgroundColor: 'transparent',
-};
+
+function getCssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+let ECHARTS_BASE, AXIS_STYLE, TOOLTIP, PIE_TOOLTIP;
+function rebuildEchartsStyles() {
+  const txt = getCssVar('--text');
+  const txtMuted = getCssVar('--text-muted');
+  const border = getCssVar('--border');
+  const tooltipBg = getCssVar('--tooltip-bg');
+  ECHARTS_BASE = {
+    textStyle: { fontFamily: '"Inter","Noto Sans KR",sans-serif', color: txt },
+    backgroundColor: 'transparent',
+  };
+  AXIS_STYLE = {
+    axisLine: { lineStyle: { color: border } },
+    axisLabel: { color: txtMuted, fontSize: 11 },
+    splitLine: { lineStyle: { color: border, opacity: 0.5 } },
+  };
+  TOOLTIP = {
+    trigger: 'axis',
+    axisPointer: { type: 'shadow' },
+    backgroundColor: tooltipBg,
+    borderColor: border, borderWidth: 1,
+    textStyle: { color: txt, fontSize: 12 },
+    valueFormatter: v => fmtKRWFull(v),
+  };
+  PIE_TOOLTIP = {
+    trigger: 'item',
+    backgroundColor: tooltipBg,
+    borderColor: border, borderWidth: 1,
+    textStyle: { color: txt, fontSize: 12 },
+    formatter: p => `${p.name}<br>${fmtKRWFull(p.value)} (${p.percent}%)`,
+  };
+}
+function itemTooltipFor(formatter) {
+  return {
+    trigger: 'item',
+    backgroundColor: getCssVar('--tooltip-bg'),
+    borderColor: getCssVar('--border'), borderWidth: 1,
+    textStyle: { color: getCssVar('--text'), fontSize: 12 },
+    formatter,
+  };
+}
+
+// ============ 테마 토글 ============
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('govad-theme', theme); } catch (_) {}
+  const isLight = theme === 'light';
+  const icon = document.getElementById('theme-toggle-icon');
+  const label = document.getElementById('theme-toggle-label');
+  if (icon) icon.textContent = isLight ? '☀' : '☾';
+  if (label) label.textContent = isLight ? '다크 모드' : '라이트 모드';
+  rebuildEchartsStyles();
+  redrawAllCharts();
+}
+function initTheme() {
+  let saved = 'dark';
+  try { saved = localStorage.getItem('govad-theme') || 'dark'; } catch (_) {}
+  document.documentElement.setAttribute('data-theme', saved);
+  rebuildEchartsStyles();
+  const isLight = saved === 'light';
+  const icon = document.getElementById('theme-toggle-icon');
+  const label = document.getElementById('theme-toggle-label');
+  if (icon) icon.textContent = isLight ? '☀' : '☾';
+  if (label) label.textContent = isLight ? '다크 모드' : '라이트 모드';
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(cur === 'dark' ? 'light' : 'dark');
+  });
+}
+function redrawAllCharts() {
+  Object.values(STATE.charts).forEach(c => { try { c.dispose(); } catch (_) {} });
+  STATE.charts = {};
+  if (!STATE.agg) return;
+  const activeTab = document.querySelector('.tab.active');
+  if (!activeTab) return;
+  const tab = activeTab.dataset.tab;
+  if (tab === 'market') renderMarket();
+  else if (tab === 'agency' && STATE.selectedAgency) renderAgencyContent();
+  else if (tab === 'media' && STATE.selectedMedia) renderMediaContent();
+}
 
 // ============ 포맷 ============
 function fmtKRW(n) {
@@ -620,19 +740,7 @@ function getChart(id) {
   }
   return STATE.charts[id];
 }
-const TOOLTIP = {
-  trigger: 'axis',
-  axisPointer: { type: 'shadow' },
-  backgroundColor: 'rgba(22,27,34,0.95)',
-  borderColor: '#2a3038', borderWidth: 1,
-  textStyle: { color: '#e6edf3', fontSize: 12 },
-  valueFormatter: v => fmtKRWFull(v),
-};
-const AXIS_STYLE = {
-  axisLine: { lineStyle: { color: '#2a3038' } },
-  axisLabel: { color: '#8b949e', fontSize: 11 },
-  splitLine: { lineStyle: { color: '#1f2630' } },
-};
+// TOOLTIP / AXIS_STYLE / ECHARTS_BASE / PIE_TOOLTIP은 rebuildEchartsStyles()에서 동적으로 정의 (테마 따라 변경)
 
 // ============ MARKET 렌더 ============
 function renderMarket() {
@@ -696,17 +804,14 @@ function renderMarket() {
     .sort((a, b) => b.value - a.value);
   getChart('chart-media-pie').setOption({
     ...ECHARTS_BASE,
-    tooltip: { trigger: 'item',
-      backgroundColor: 'rgba(22,27,34,0.95)', borderColor: '#2a3038',
-      textStyle: { color: '#e6edf3' },
-      formatter: p => `${p.name}<br>${fmtKRWFull(p.value)} (${p.percent}%)` },
-    legend: { bottom: 0, textStyle: { color: '#8b949e', fontSize: 11 } },
+    tooltip: PIE_TOOLTIP,
+    legend: { bottom: 0, textStyle: { color: getCssVar('--text-muted'), fontSize: 11 } },
     color: SERIES_COLORS,
     series: [{
       type: 'pie', radius: ['45%', '70%'], center: ['50%', '45%'],
-      label: { color: '#e6edf3', fontSize: 11,
+      label: { color: getCssVar('--text'), fontSize: 11,
         formatter: p => `${p.name}\n${p.percent}%` },
-      labelLine: { lineStyle: { color: '#2a3038' } },
+      labelLine: { lineStyle: { color: getCssVar('--border') } },
       data: pieData,
     }],
   }, true);
@@ -739,7 +844,8 @@ function renderStackedBar(id, map, years) {
     ...ECHARTS_BASE,
     grid: { left: 60, right: 24, top: 56, bottom: 36 },
     tooltip: { ...TOOLTIP, valueFormatter: v => fmtKRW(v) + '원' },
-    legend: { top: 0, type: 'scroll', textStyle: { color: '#8b949e', fontSize: 11 } },
+    legend: { top: 0, type: 'scroll',
+      textStyle: { color: getCssVar('--text-muted'), fontSize: 11 } },
     xAxis: { type: 'category', data: years, ...AXIS_STYLE },
     yAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: fmtKRW } },
     series,
@@ -750,10 +856,7 @@ function renderHBar(id, data, color) {
   getChart(id).setOption({
     ...ECHARTS_BASE,
     grid: { left: 140, right: 60, top: 12, bottom: 24 },
-    tooltip: { trigger: 'item',
-      backgroundColor: 'rgba(22,27,34,0.95)', borderColor: '#2a3038',
-      textStyle: { color: '#e6edf3' },
-      formatter: p => `${p.name}<br>${fmtKRWFull(p.value)}` },
+    tooltip: itemTooltipFor(p => `${p.name}<br>${fmtKRWFull(p.value)}`),
     xAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: fmtKRW } },
     yAxis: { type: 'category', data: data.map(d => d.name), ...AXIS_STYLE,
       axisLabel: { ...AXIS_STYLE.axisLabel, fontSize: 11, width: 130, overflow: 'truncate' } },
@@ -761,7 +864,7 @@ function renderHBar(id, data, color) {
       type: 'bar',
       data: data.map(d => d.value),
       itemStyle: { color },
-      label: { show: true, position: 'right', color: '#8b949e', fontSize: 10,
+      label: { show: true, position: 'right', color: getCssVar('--text-muted'), fontSize: 10,
         formatter: p => fmtKRW(p.value) },
     }],
   }, true);
@@ -775,8 +878,17 @@ function setupTabs() {
       document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       document.getElementById('panel-' + b.dataset.tab).classList.add('active');
-      // 차트 리사이즈
-      setTimeout(() => Object.values(STATE.charts).forEach(c => c.resize()), 0);
+      const tab = b.dataset.tab;
+      // detail 탭으로 돌아갈 때 차트가 dispose돼 있으면 재렌더
+      if (tab === 'agency' && STATE.selectedAgency && !STATE.charts['ag-yearly']) {
+        renderAgencyContent();
+      } else if (tab === 'media' && STATE.selectedMedia && !STATE.charts['md-yearly']) {
+        renderMediaContent();
+      } else if (tab === 'market' && !STATE.charts['chart-yearly']) {
+        renderMarket();
+      } else {
+        setTimeout(() => Object.values(STATE.charts).forEach(c => c.resize()), 0);
+      }
     });
   });
 }
@@ -902,7 +1014,7 @@ function buildRawTableHTML(cols, subtitle) {
   `;
 }
 
-async function appendRawTable(containerId, kind, idx, cols, subtitle) {
+async function appendRawTable(containerId, kind, idx, cols, subtitle, yearSet) {
   const host = document.getElementById(containerId);
   host.insertAdjacentHTML('beforeend', buildRawTableHTML(cols, subtitle));
   const card = host.lastElementChild;
@@ -918,14 +1030,14 @@ async function appendRawTable(containerId, kind, idx, cols, subtitle) {
       STATE.rawCache.set(cacheKey, raw);
     }
     if (myToken !== STATE.rawToken) return;  // 사용자가 다른 entity로 이미 이동
-    bindRawTable(card, raw, cols);
+    bindRawTable(card, raw, cols, yearSet);
   } catch (e) {
     card.querySelector('.raw-loading').innerHTML =
       `<span style="color:var(--red)">세부 내역 로드 실패: ${escapeHTML(e.message)}</span>`;
   }
 }
 
-function bindRawTable(card, raw, cols) {
+function bindRawTable(card, raw, cols, yearSet) {
   const tbody = card.querySelector('tbody');
   const countEl = card.querySelector('.raw-table-count');
   const moreBtn = card.querySelector('.raw-load-more');
@@ -942,6 +1054,9 @@ function bindRawTable(card, raw, cols) {
 
   function applyFilterSort() {
     let rows = raw.rows;
+    if (yearSet && yearSet.size > 0) {
+      rows = rows.filter(r => yearSet.has(r[0]));
+    }
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       rows = rows.filter(r => String(r[3]).toLowerCase().includes(q));
@@ -1015,16 +1130,29 @@ function bindRawTable(card, raw, cols) {
 
 // ============ 광고주 상세 ============
 function renderAgencyDetail(entry) {
+  STATE.selectedAgency = entry;
+  STATE.detailYearsAgency = new Set(STATE.agg.years);  // entry 바뀔 때마다 초기화
+  renderAgencyContent();
+}
+
+function renderAgencyContent() {
+  const entry = STATE.selectedAgency;
+  if (!entry) return;
   const ag = STATE.agg;
   const aIdx = entry.idx;
+  const yearSet = STATE.detailYearsAgency.size > 0
+    ? STATE.detailYearsAgency
+    : new Set(ag.years);
+
   const yearAmt = new Map();
-  const mediaAmt = new Map();      // mIdx -> {amount, count}
+  const mediaAmt = new Map();      // mIdx -> {amount, count, mtype}
   const mtypeAmt = new Map();
   let totalAmt = 0, totalCnt = 0;
 
   for (const r of ag.rows) {
     if (r[2] !== aIdx) continue;
     const year = ag.years[r[0]];
+    if (!yearSet.has(year)) continue;
     const mIdx = r[4];
     const mt = ag.media_types[r[3]];
     const amt = r[5], cnt = r[6];
@@ -1038,11 +1166,15 @@ function renderAgencyDetail(entry) {
   }
 
   const usedMediaCount = mediaAmt.size;
-  const years = [...ag.years];
+  const sortedYears = [...yearSet].sort((a, b) => a - b);
   const topMedia = [...mediaAmt.entries()]
     .sort((a, b) => b[1].amount - a[1].amount).slice(0, 20)
     .map(([mIdx, v]) => ({ name: ag.media[mIdx], value: v.amount, count: v.count, mtype: v.mtype }))
     .reverse();
+
+  const yearChips = ag.years.map(y =>
+    `<button class="chip ${yearSet.has(y) ? 'active' : ''}" data-y="${y}">${y}</button>`
+  ).join('');
 
   const html = `
     <div class="detail-header">
@@ -1053,6 +1185,12 @@ function renderAgencyDetail(entry) {
         <div class="detail-kpi"><div class="detail-kpi-label">총 집행액</div><div class="detail-kpi-value">${fmtKRW(totalAmt)}원</div></div>
         <div class="detail-kpi"><div class="detail-kpi-label">총 건수</div><div class="detail-kpi-value">${fmtInt(totalCnt)}건</div></div>
         <div class="detail-kpi"><div class="detail-kpi-label">사용 매체 수</div><div class="detail-kpi-value">${fmtInt(usedMediaCount)}개</div></div>
+      </div>
+    </div>
+    <div class="filters detail-year-filter">
+      <div class="filter-group" style="grid-column: 1 / -1;">
+        <div class="filter-label">집행연도</div>
+        <div class="chip-row" id="ag-year-chips">${yearChips}</div>
       </div>
     </div>
     <div class="grid-2">
@@ -1074,49 +1212,73 @@ function renderAgencyDetail(entry) {
     </div>
   `;
   document.getElementById('detail-agency').innerHTML = html;
-  // 차트 인스턴스 재생성 (DOM 갈렸음)
-  ['ag-yearly', 'ag-mtype', 'ag-top-media'].forEach(id => { delete STATE.charts[id]; });
+  ['ag-yearly', 'ag-mtype', 'ag-top-media'].forEach(id => {
+    if (STATE.charts[id]) { try { STATE.charts[id].dispose(); } catch (_) {} delete STATE.charts[id]; }
+  });
+
+  // 연도 chip 핸들러
+  document.querySelectorAll('#ag-year-chips .chip').forEach(b => {
+    b.addEventListener('click', () => {
+      const y = parseInt(b.dataset.y);
+      if (STATE.detailYearsAgency.has(y)) STATE.detailYearsAgency.delete(y);
+      else STATE.detailYearsAgency.add(y);
+      renderAgencyContent();
+    });
+  });
 
   getChart('ag-yearly').setOption({
     ...ECHARTS_BASE,
     grid: { left: 60, right: 24, top: 24, bottom: 36 },
     tooltip: { ...TOOLTIP },
-    xAxis: { type: 'category', data: years, ...AXIS_STYLE },
+    xAxis: { type: 'category', data: sortedYears,
+      ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, interval: 0 } },
     yAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: fmtKRW } },
     series: [{
       type: 'bar',
-      data: years.map(y => yearAmt.get(y) || 0),
-      itemStyle: { color: '#58a6ff' },
+      data: sortedYears.map(y => yearAmt.get(y) || 0),
+      itemStyle: { color: getCssVar('--accent') },
+      label: { show: true, position: 'top', color: getCssVar('--text-muted'), fontSize: 10,
+        formatter: p => fmtKRW(p.value) },
     }],
   }, true);
 
   const pieData = [...mtypeAmt.entries()].map(([name, value]) => ({name, value})).sort((a,b) => b.value - a.value);
   getChart('ag-mtype').setOption({
     ...ECHARTS_BASE,
-    tooltip: { trigger: 'item', backgroundColor: 'rgba(22,27,34,0.95)', borderColor: '#2a3038',
-      textStyle: { color: '#e6edf3' },
-      formatter: p => `${p.name}<br>${fmtKRWFull(p.value)} (${p.percent}%)` },
-    legend: { bottom: 0, textStyle: { color: '#8b949e', fontSize: 11 } },
+    tooltip: PIE_TOOLTIP,
+    legend: { bottom: 0, textStyle: { color: getCssVar('--text-muted'), fontSize: 11 } },
     color: SERIES_COLORS,
     series: [{
       type: 'pie', radius: ['45%', '70%'], center: ['50%', '45%'],
-      label: { color: '#e6edf3', fontSize: 11, formatter: p => `${p.name}\n${p.percent}%` },
-      labelLine: { lineStyle: { color: '#2a3038' } },
+      label: { color: getCssVar('--text'), fontSize: 11, formatter: p => `${p.name}\n${p.percent}%` },
+      labelLine: { lineStyle: { color: getCssVar('--border') } },
       data: pieData,
     }],
   }, true);
 
   renderHBar('ag-top-media', topMedia, '#f78166');
 
-  // 세부 광고 집행 내역 (lazy load)
+  // 세부 광고 집행 내역 (lazy load + 연도 필터 적용)
   appendRawTable('detail-agency', 'agency', entry.idx, AGENCY_TABLE_COLS,
-    `${entry.name}이(가) 집행한 개별 광고 건`);
+    `${entry.name}이(가) 집행한 개별 광고 건`, yearSet);
 }
 
 // ============ 매체 상세 ============
 function renderMediaDetail(entry) {
+  STATE.selectedMedia = entry;
+  STATE.detailYearsMedia = new Set(STATE.agg.years);
+  renderMediaContent();
+}
+
+function renderMediaContent() {
+  const entry = STATE.selectedMedia;
+  if (!entry) return;
   const ag = STATE.agg;
   const mIdx = entry.idx;
+  const yearSet = STATE.detailYearsMedia.size > 0
+    ? STATE.detailYearsMedia
+    : new Set(ag.years);
+
   const yearAmt = new Map();
   const agencyAmt = new Map();
   const atypeAmt = new Map();
@@ -1125,6 +1287,7 @@ function renderMediaDetail(entry) {
   for (const r of ag.rows) {
     if (r[4] !== mIdx) continue;
     const year = ag.years[r[0]];
+    if (!yearSet.has(year)) continue;
     const aIdx = r[2];
     const at = ag.agency_types[r[1]];
     const amt = r[5], cnt = r[6];
@@ -1138,11 +1301,15 @@ function renderMediaDetail(entry) {
   }
 
   const fromAgencyCount = agencyAmt.size;
-  const years = [...ag.years];
+  const sortedYears = [...yearSet].sort((a, b) => a - b);
   const topAgencies = [...agencyAmt.entries()]
     .sort((a, b) => b[1].amount - a[1].amount).slice(0, 20)
     .map(([aIdx, v]) => ({ name: ag.agencies[aIdx], value: v.amount, count: v.count, atype: v.atype }))
     .reverse();
+
+  const yearChips = ag.years.map(y =>
+    `<button class="chip ${yearSet.has(y) ? 'active' : ''}" data-y="${y}">${y}</button>`
+  ).join('');
 
   const html = `
     <div class="detail-header">
@@ -1153,6 +1320,12 @@ function renderMediaDetail(entry) {
         <div class="detail-kpi"><div class="detail-kpi-label">총 수주액</div><div class="detail-kpi-value">${fmtKRW(totalAmt)}원</div></div>
         <div class="detail-kpi"><div class="detail-kpi-label">총 건수</div><div class="detail-kpi-value">${fmtInt(totalCnt)}건</div></div>
         <div class="detail-kpi"><div class="detail-kpi-label">광고주 수</div><div class="detail-kpi-value">${fmtInt(fromAgencyCount)}개</div></div>
+      </div>
+    </div>
+    <div class="filters detail-year-filter">
+      <div class="filter-group" style="grid-column: 1 / -1;">
+        <div class="filter-label">집행연도</div>
+        <div class="chip-row" id="md-year-chips">${yearChips}</div>
       </div>
     </div>
     <div class="grid-2">
@@ -1174,42 +1347,55 @@ function renderMediaDetail(entry) {
     </div>
   `;
   document.getElementById('detail-media').innerHTML = html;
-  ['md-yearly', 'md-atype', 'md-top-agencies'].forEach(id => { delete STATE.charts[id]; });
+  ['md-yearly', 'md-atype', 'md-top-agencies'].forEach(id => {
+    if (STATE.charts[id]) { try { STATE.charts[id].dispose(); } catch (_) {} delete STATE.charts[id]; }
+  });
+
+  // 연도 chip 핸들러
+  document.querySelectorAll('#md-year-chips .chip').forEach(b => {
+    b.addEventListener('click', () => {
+      const y = parseInt(b.dataset.y);
+      if (STATE.detailYearsMedia.has(y)) STATE.detailYearsMedia.delete(y);
+      else STATE.detailYearsMedia.add(y);
+      renderMediaContent();
+    });
+  });
 
   getChart('md-yearly').setOption({
     ...ECHARTS_BASE,
     grid: { left: 60, right: 24, top: 24, bottom: 36 },
     tooltip: { ...TOOLTIP },
-    xAxis: { type: 'category', data: years, ...AXIS_STYLE },
+    xAxis: { type: 'category', data: sortedYears,
+      ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, interval: 0 } },
     yAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: fmtKRW } },
     series: [{
       type: 'bar',
-      data: years.map(y => yearAmt.get(y) || 0),
-      itemStyle: { color: '#f78166' },
+      data: sortedYears.map(y => yearAmt.get(y) || 0),
+      itemStyle: { color: getCssVar('--accent-2') },
+      label: { show: true, position: 'top', color: getCssVar('--text-muted'), fontSize: 10,
+        formatter: p => fmtKRW(p.value) },
     }],
   }, true);
 
   const pieData = [...atypeAmt.entries()].map(([name, value]) => ({name, value})).sort((a,b) => b.value - a.value);
   getChart('md-atype').setOption({
     ...ECHARTS_BASE,
-    tooltip: { trigger: 'item', backgroundColor: 'rgba(22,27,34,0.95)', borderColor: '#2a3038',
-      textStyle: { color: '#e6edf3' },
-      formatter: p => `${p.name}<br>${fmtKRWFull(p.value)} (${p.percent}%)` },
-    legend: { bottom: 0, textStyle: { color: '#8b949e', fontSize: 11 } },
+    tooltip: PIE_TOOLTIP,
+    legend: { bottom: 0, textStyle: { color: getCssVar('--text-muted'), fontSize: 11 } },
     color: SERIES_COLORS,
     series: [{
       type: 'pie', radius: ['45%', '70%'], center: ['50%', '45%'],
-      label: { color: '#e6edf3', fontSize: 11, formatter: p => `${p.name}\n${p.percent}%` },
-      labelLine: { lineStyle: { color: '#2a3038' } },
+      label: { color: getCssVar('--text'), fontSize: 11, formatter: p => `${p.name}\n${p.percent}%` },
+      labelLine: { lineStyle: { color: getCssVar('--border') } },
       data: pieData,
     }],
   }, true);
 
   renderHBar('md-top-agencies', topAgencies, '#58a6ff');
 
-  // 세부 광고 집행 내역 (lazy load)
+  // 세부 광고 집행 내역 (lazy load + 연도 필터 적용)
   appendRawTable('detail-media', 'media', entry.idx, MEDIA_TABLE_COLS,
-    `${entry.name}이(가) 수주한 개별 광고 건`);
+    `${entry.name}이(가) 수주한 개별 광고 건`, yearSet);
 }
 
 // ============ INIT ============
@@ -1219,6 +1405,7 @@ function renderMediaDetail(entry) {
     // 차트 init 전에 app을 보이게 해야 컨테이너 width가 잡힘
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
+    initTheme();
     renderKPI();
     renderFilters();
     setupTabs();
