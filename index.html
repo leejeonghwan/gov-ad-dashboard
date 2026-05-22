@@ -226,6 +226,67 @@
   }
   .placeholder-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 
+  /* ============ RAW TABLE ============ */
+  .raw-table-card { margin-top: 20px; }
+  .raw-table-header {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 16px; margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .raw-search {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; font-size: 13px; border-radius: 6px;
+    font-family: inherit; outline: none; min-width: 220px;
+    transition: border-color 0.15s;
+  }
+  .raw-search:focus { border-color: var(--accent); }
+  .raw-search::placeholder { color: var(--text-dim); }
+  .raw-table-wrap {
+    overflow-x: auto; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg);
+  }
+  .raw-table {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+  }
+  .raw-table thead { background: var(--bg-hover); position: sticky; top: 0; }
+  .raw-table th {
+    padding: 10px 12px; text-align: left; font-weight: 600;
+    color: var(--text-muted); border-bottom: 1px solid var(--border);
+    cursor: pointer; user-select: none; white-space: nowrap;
+    transition: color 0.1s;
+  }
+  .raw-table th:hover { color: var(--text); }
+  .raw-table th.num { text-align: right; }
+  .raw-table th.sort-asc::after { content: ' ▲'; color: var(--accent); font-size: 9px; }
+  .raw-table th.sort-desc::after { content: ' ▼'; color: var(--accent); font-size: 9px; }
+  .raw-table td {
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    color: var(--text); vertical-align: top;
+  }
+  .raw-table tr:last-child td { border-bottom: none; }
+  .raw-table tr:hover td { background: var(--bg-hover); }
+  .raw-table td.num {
+    text-align: right; font-variant-numeric: tabular-nums; color: var(--text);
+  }
+  .raw-table td.muted { color: var(--text-dim); font-size: 11.5px; }
+  .raw-table td.ad-name {
+    max-width: 420px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .raw-table tr:hover td.ad-name { white-space: normal; overflow: visible; }
+  .raw-table-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 12px; font-size: 12px; color: var(--text-dim);
+  }
+  .raw-load-more {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text-muted);
+    padding: 6px 14px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    font-family: inherit; transition: all 0.15s;
+  }
+  .raw-load-more:hover { color: var(--text); border-color: var(--text-muted); }
+  .raw-loading {
+    padding: 40px; text-align: center; color: var(--text-dim); font-size: 13px;
+  }
+
   /* ============ LOADING ============ */
   #loading {
     position: fixed; inset: 0; background: var(--bg);
@@ -418,6 +479,8 @@ const STATE = {
   selectedAgency: null,
   selectedMedia: null,
   charts: {},
+  rawCache: new Map(),  // key: `agency-${idx}` / `media-${idx}` → fetched JSON
+  rawToken: 0,          // 진입 race condition 방지
 };
 
 // ============ 색상 ============
@@ -788,7 +851,166 @@ function setupSearch(inputId, suggId, totals, onSelect) {
 }
 
 function escapeHTML(s) {
-  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============ Raw 광고 내역 테이블 ============
+const AGENCY_TABLE_COLS = [
+  { key: 0, label: '연도',          type: 'num', cls: '' },
+  { key: 1, label: '매체구분',      type: 'str', cls: 'muted' },
+  { key: 2, label: '매체명',        type: 'str', cls: '' },
+  { key: 3, label: '광고명',        type: 'str', cls: 'ad-name' },
+  { key: 4, label: '광고료',        type: 'num', cls: 'num' },
+  { key: 5, label: '총액(VAT포함)', type: 'num', cls: 'num' },
+];
+const MEDIA_TABLE_COLS = [
+  { key: 0, label: '연도',          type: 'num', cls: '' },
+  { key: 1, label: '기관분류',      type: 'str', cls: 'muted' },
+  { key: 2, label: '기관명',        type: 'str', cls: '' },
+  { key: 3, label: '광고명',        type: 'str', cls: 'ad-name' },
+  { key: 4, label: '광고료',        type: 'num', cls: 'num' },
+  { key: 5, label: '총액(VAT포함)', type: 'num', cls: 'num' },
+];
+const PAGE_SIZE = 50;
+
+function buildRawTableHTML(cols, subtitle) {
+  const headerCells = cols.map(c => {
+    const cls = c.type === 'num' ? 'num' : '';
+    return `<th data-key="${c.key}" data-type="${c.type}" class="${cls}">${escapeHTML(c.label)}</th>`;
+  }).join('');
+  return `
+    <div class="card raw-table-card">
+      <div class="raw-table-header">
+        <div>
+          <h3 class="chart-title">세부 광고 집행 내역</h3>
+          <p class="chart-sub">${escapeHTML(subtitle)} · 컬럼 헤더 클릭 시 정렬</p>
+        </div>
+        <input type="text" class="raw-search" placeholder="광고명 검색…" />
+      </div>
+      <div class="raw-loading">세부 내역 불러오는 중…</div>
+      <div class="raw-table-wrap" style="display:none">
+        <table class="raw-table">
+          <thead><tr>${headerCells}</tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="raw-table-footer" style="display:none">
+        <span class="raw-table-count">— 건</span>
+        <button class="raw-load-more">더보기 (+${PAGE_SIZE})</button>
+      </div>
+    </div>
+  `;
+}
+
+async function appendRawTable(containerId, kind, idx, cols, subtitle) {
+  const host = document.getElementById(containerId);
+  host.insertAdjacentHTML('beforeend', buildRawTableHTML(cols, subtitle));
+  const card = host.lastElementChild;
+
+  const myToken = ++STATE.rawToken;
+  const cacheKey = `${kind}-${idx}`;
+  try {
+    let raw = STATE.rawCache.get(cacheKey);
+    if (!raw) {
+      const res = await fetch(`data/${kind}/${idx}.json`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      raw = await res.json();
+      STATE.rawCache.set(cacheKey, raw);
+    }
+    if (myToken !== STATE.rawToken) return;  // 사용자가 다른 entity로 이미 이동
+    bindRawTable(card, raw, cols);
+  } catch (e) {
+    card.querySelector('.raw-loading').innerHTML =
+      `<span style="color:var(--red)">세부 내역 로드 실패: ${escapeHTML(e.message)}</span>`;
+  }
+}
+
+function bindRawTable(card, raw, cols) {
+  const tbody = card.querySelector('tbody');
+  const countEl = card.querySelector('.raw-table-count');
+  const moreBtn = card.querySelector('.raw-load-more');
+  const searchInput = card.querySelector('.raw-search');
+  const tableWrap = card.querySelector('.raw-table-wrap');
+  const footer = card.querySelector('.raw-table-footer');
+  const loading = card.querySelector('.raw-loading');
+
+  let sortKey = 5;   // 총액
+  let sortDesc = true;
+  let searchTerm = '';
+  let visibleCount = PAGE_SIZE;
+  let lastFiltered = raw.rows;
+
+  function applyFilterSort() {
+    let rows = raw.rows;
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      rows = rows.filter(r => String(r[3]).toLowerCase().includes(q));
+    }
+    rows = rows.slice().sort((a, b) => {
+      const av = a[sortKey], bv = b[sortKey];
+      const cmp = (typeof av === 'number' && typeof bv === 'number')
+        ? (av - bv)
+        : String(av).localeCompare(String(bv), 'ko');
+      return sortDesc ? -cmp : cmp;
+    });
+    return rows;
+  }
+
+  function render() {
+    lastFiltered = applyFilterSort();
+    const visible = lastFiltered.slice(0, visibleCount);
+    tbody.innerHTML = visible.map(r => {
+      const tds = cols.map(c => {
+        let val = r[c.key];
+        if (c.type === 'num') val = fmtInt(val);
+        else val = escapeHTML(val);
+        return `<td class="${c.cls}">${val}</td>`;
+      }).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    countEl.textContent =
+      `${fmtInt(visible.length)} / ${fmtInt(lastFiltered.length)}건 · 총 ${fmtInt(raw.rows.length)}건`;
+    moreBtn.style.display = visible.length < lastFiltered.length ? 'inline-block' : 'none';
+  }
+
+  card.querySelectorAll('th[data-key]').forEach(th => {
+    th.addEventListener('click', () => {
+      const k = parseInt(th.dataset.key);
+      if (sortKey === k) {
+        sortDesc = !sortDesc;
+      } else {
+        sortKey = k;
+        sortDesc = th.dataset.type === 'num';
+      }
+      card.querySelectorAll('th[data-key]').forEach(x =>
+        x.classList.remove('sort-asc', 'sort-desc'));
+      th.classList.add(sortDesc ? 'sort-desc' : 'sort-asc');
+      visibleCount = PAGE_SIZE;
+      render();
+    });
+  });
+
+  let searchTimer = null;
+  searchInput.addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      searchTerm = e.target.value.trim();
+      visibleCount = PAGE_SIZE;
+      render();
+    }, 150);
+  });
+
+  moreBtn.addEventListener('click', () => {
+    visibleCount += PAGE_SIZE;
+    render();
+  });
+
+  // 초기 정렬 표시
+  card.querySelector(`th[data-key="${sortKey}"]`).classList.add('sort-desc');
+  loading.style.display = 'none';
+  tableWrap.style.display = '';
+  footer.style.display = '';
+  render();
 }
 
 // ============ 광고주 상세 ============
@@ -885,6 +1107,10 @@ function renderAgencyDetail(entry) {
   }, true);
 
   renderHBar('ag-top-media', topMedia, '#f78166');
+
+  // 세부 광고 집행 내역 (lazy load)
+  appendRawTable('detail-agency', 'agency', entry.idx, AGENCY_TABLE_COLS,
+    `${entry.name}이(가) 집행한 개별 광고 건`);
 }
 
 // ============ 매체 상세 ============
@@ -980,6 +1206,10 @@ function renderMediaDetail(entry) {
   }, true);
 
   renderHBar('md-top-agencies', topAgencies, '#58a6ff');
+
+  // 세부 광고 집행 내역 (lazy load)
+  appendRawTable('detail-media', 'media', entry.idx, MEDIA_TABLE_COLS,
+    `${entry.name}이(가) 수주한 개별 광고 건`);
 }
 
 // ============ INIT ============

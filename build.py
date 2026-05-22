@@ -14,6 +14,8 @@
 출력:
     data/overview.json
     data/aggregate.json
+    data/agency/{idx}.json (광고주별 raw 행)
+    data/media/{idx}.json  (매체별 raw 행)
 """
 from __future__ import annotations
 
@@ -33,6 +35,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 YEAR_FROM_NAME = re.compile(r"(\d{4})")
 KEY_COLS = ["기관분류", "기관명", "매체구분", "매체명"]
+DETAIL_COLS_EXTRA = ["광고명", "광고료"]  # raw partition에 추가로 필요한 컬럼
 
 
 def collect_files() -> list[tuple[int, Path]]:
@@ -78,11 +81,18 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     print(f"  NaN 제거: {before - len(df):,}행 → 잔여 {len(df):,}")
 
     # 문자열 trim + 내부 다중공백 정리
-    for c in KEY_COLS + (["광고명"] if "광고명" in df.columns else []):
+    str_cols = KEY_COLS + [c for c in ["광고명"] if c in df.columns]
+    for c in str_cols:
         df[c] = df[c].astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
 
-    # 금액을 int로
+    # 광고명 빈값/NaN 표기 정리 (raw 테이블에 보여줄 값)
+    if "광고명" in df.columns:
+        df.loc[df["광고명"].isin(["nan", "NaN", "None", ""]), "광고명"] = "(광고명 미기재)"
+
+    # 금액 컬럼 int 변환
     df["총액"] = pd.to_numeric(df["총액"], errors="coerce").fillna(0).astype("int64")
+    if "광고료" in df.columns:
+        df["광고료"] = pd.to_numeric(df["광고료"], errors="coerce").fillna(0).astype("int64")
 
     # 0/음수 금액 제거 (집계 의미 없음)
     before = len(df)
@@ -232,10 +242,74 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    # === 광고주별/매체별 raw partition ===
+    print("\n[추가] 광고주별 raw JSON 생성")
+    agency_dir = OUT_DIR / "agency"
+    agency_dir.mkdir(exist_ok=True)
+    # 기존 파일 정리 (이름 충돌/잔재 방지)
+    for old in agency_dir.glob("*.json"):
+        old.unlink()
+    agency_to_idx = {a: i for i, a in enumerate(agencies)}
+    agency_partition_count = 0
+    agency_partition_bytes = 0
+    for name, group in df.groupby("기관명", sort=False):
+        idx = agency_to_idx.get(name)
+        if idx is None:
+            continue
+        sub = group.sort_values("총액", ascending=False)[
+            ["연도", "매체구분", "매체명", "광고명", "광고료", "총액"]
+        ]
+        payload = {
+            "name": name,
+            "type": group["기관분류"].iloc[0],
+            "schema": ["year", "media_type", "media", "ad", "ad_fee", "total"],
+            "rows": [
+                [int(r.연도), r.매체구분, r.매체명, r.광고명, int(r.광고료), int(r.총액)]
+                for r in sub.itertuples(index=False)
+            ],
+        }
+        out = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        (agency_dir / f"{idx}.json").write_text(out, encoding="utf-8")
+        agency_partition_count += 1
+        agency_partition_bytes += len(out.encode("utf-8"))
+    print(f"  → {agency_partition_count:,}개 파일, 합계 {agency_partition_bytes/1024/1024:.1f}MB")
+
+    print("\n[추가] 매체별 raw JSON 생성")
+    media_dir = OUT_DIR / "media"
+    media_dir.mkdir(exist_ok=True)
+    for old in media_dir.glob("*.json"):
+        old.unlink()
+    media_to_idx = {m: i for i, m in enumerate(medias)}
+    media_partition_count = 0
+    media_partition_bytes = 0
+    for name, group in df.groupby("매체명", sort=False):
+        idx = media_to_idx.get(name)
+        if idx is None:
+            continue
+        sub = group.sort_values("총액", ascending=False)[
+            ["연도", "기관분류", "기관명", "광고명", "광고료", "총액"]
+        ]
+        payload = {
+            "name": name,
+            "type": group["매체구분"].iloc[0],
+            "schema": ["year", "agency_type", "agency", "ad", "ad_fee", "total"],
+            "rows": [
+                [int(r.연도), r.기관분류, r.기관명, r.광고명, int(r.광고료), int(r.총액)]
+                for r in sub.itertuples(index=False)
+            ],
+        }
+        out = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        (media_dir / f"{idx}.json").write_text(out, encoding="utf-8")
+        media_partition_count += 1
+        media_partition_bytes += len(out.encode("utf-8"))
+    print(f"  → {media_partition_count:,}개 파일, 합계 {media_partition_bytes/1024/1024:.1f}MB")
+
     print("\n완료 — 파일 크기:")
     for p in sorted(OUT_DIR.glob("*.json")):
         size_mb = p.stat().st_size / 1024 / 1024
         print(f"  {p.name}: {size_mb:.2f} MB")
+    print(f"  agency/: {agency_partition_count:,} files, {agency_partition_bytes/1024/1024:.1f}MB")
+    print(f"  media/: {media_partition_count:,} files, {media_partition_bytes/1024/1024:.1f}MB")
 
 
 if __name__ == "__main__":
