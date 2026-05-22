@@ -537,13 +537,14 @@ function renderFilters() {
 function* iterFiltered() {
   const ag = STATE.agg;
   const f = STATE.filters;
+  // 빈 필터 = 전체로 fallback (실수로 모두 해제했을 때)
+  const yrs = f.years.size > 0 ? f.years : new Set(ag.years);
+  const ats = f.atypes.size > 0 ? f.atypes : new Set(ag.agency_types);
+  const mts = f.mtypes.size > 0 ? f.mtypes : new Set(ag.media_types);
   for (const r of ag.rows) {
-    const year = ag.years[r[0]];
-    const at = ag.agency_types[r[1]];
-    const mt = ag.media_types[r[3]];
-    if (!f.years.has(year)) continue;
-    if (!f.atypes.has(at)) continue;
-    if (!f.mtypes.has(mt)) continue;
+    if (!yrs.has(ag.years[r[0]])) continue;
+    if (!ats.has(ag.agency_types[r[1]])) continue;
+    if (!mts.has(ag.media_types[r[3]])) continue;
     yield r;
   }
 }
@@ -603,20 +604,24 @@ function renderMarket() {
     mtypeTotal.set(mt, (mtypeTotal.get(mt) || 0) + amt);
   }
 
-  const sortedYears = [...STATE.filters.years].sort();
+  const sortedYears = [...(STATE.filters.years.size > 0 ? STATE.filters.years : new Set(ag.years))]
+    .sort((a, b) => a - b);
 
   // 1. 연도별 라인
   getChart('chart-yearly').setOption({
     ...ECHARTS_BASE,
-    grid: { left: 60, right: 24, top: 24, bottom: 36 },
+    grid: { left: 60, right: 30, top: 24, bottom: 36 },
     tooltip: { ...TOOLTIP },
-    xAxis: { type: 'category', data: sortedYears, ...AXIS_STYLE },
+    xAxis: { type: 'category', data: sortedYears,
+      ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, interval: 0 } },
     yAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: fmtKRW } },
     series: [{
-      type: 'line', smooth: true, symbolSize: 8,
+      type: 'line', smooth: true, symbolSize: 10,
       data: sortedYears.map(y => yearlySum.get(y) || 0),
       lineStyle: { width: 3, color: '#58a6ff' },
       itemStyle: { color: '#58a6ff' },
+      label: { show: true, position: 'top', color: '#8b949e', fontSize: 11,
+        formatter: p => fmtKRW(p.value) },
       areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
         colorStops: [{ offset: 0, color: 'rgba(88,166,255,0.4)' }, { offset: 1, color: 'rgba(88,166,255,0)' }] } },
     }],
@@ -669,9 +674,9 @@ function renderStackedBar(id, map, years) {
   }));
   getChart(id).setOption({
     ...ECHARTS_BASE,
-    grid: { left: 60, right: 24, top: 36, bottom: 36 },
+    grid: { left: 60, right: 24, top: 56, bottom: 36 },
     tooltip: { ...TOOLTIP, valueFormatter: v => fmtKRW(v) + '원' },
-    legend: { top: 0, textStyle: { color: '#8b949e', fontSize: 11 } },
+    legend: { top: 0, type: 'scroll', textStyle: { color: '#8b949e', fontSize: 11 } },
     xAxis: { type: 'category', data: years, ...AXIS_STYLE },
     yAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: fmtKRW } },
     series,
@@ -981,14 +986,19 @@ function renderMediaDetail(entry) {
 (async function init() {
   try {
     await loadData();
+    // 차트 init 전에 app을 보이게 해야 컨테이너 width가 잡힘
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
     renderKPI();
     renderFilters();
     setupTabs();
     setupSearch('search-agency', 'suggestions-agency', STATE.agencyTotals, renderAgencyDetail);
     setupSearch('search-media', 'suggestions-media', STATE.mediaTotals, renderMediaDetail);
+    // layout flush 후 차트 그리기
+    await new Promise(r => requestAnimationFrame(r));
     renderMarket();
-    document.getElementById('loading').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
+    // 안전망: 모든 차트 한 번 더 resize
+    setTimeout(() => Object.values(STATE.charts).forEach(c => c.resize()), 50);
   } catch (e) {
     const isFileProto = location.protocol === 'file:' || location.protocol === 'blob:';
     const hint = isFileProto
