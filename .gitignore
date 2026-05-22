@@ -1,0 +1,20 @@
+# 원본 데이터 (GitHub 100MB 제한 초과 / 별도 보관)
+master_ad_data.csv
+*.xlsx
+*.csv
+!data/*.csv
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 에디터
+.vscode/
+.idea/
+*.swp
