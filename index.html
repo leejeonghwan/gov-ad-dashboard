@@ -266,14 +266,23 @@
     display: flex; justify-content: space-between; align-items: center;
     gap: 16px; margin-bottom: 12px; flex-wrap: wrap;
   }
+  .raw-search-row {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
   .raw-search {
     background: var(--bg); border: 1px solid var(--border); color: var(--text);
     padding: 8px 12px; font-size: 13px; border-radius: 6px;
-    font-family: inherit; outline: none; min-width: 220px;
+    font-family: inherit; outline: none; min-width: 180px;
     transition: border-color 0.15s;
   }
   .raw-search:focus { border-color: var(--accent); }
   .raw-search::placeholder { color: var(--text-dim); }
+  .raw-clear {
+    background: none; border: none; color: var(--text-dim);
+    font-size: 11px; padding: 4px 8px; cursor: pointer; font-family: inherit;
+    border-radius: 4px;
+  }
+  .raw-clear:hover { color: var(--text-muted); background: var(--bg-hover); }
   .raw-table-wrap {
     overflow-x: auto; border: 1px solid var(--border); border-radius: 6px;
     background: var(--bg);
@@ -970,16 +979,16 @@ function escapeHTML(s) {
 const AGENCY_TABLE_COLS = [
   { key: 0, label: '연도',          type: 'num', cls: '' },
   { key: 1, label: '매체구분',      type: 'str', cls: 'muted' },
-  { key: 2, label: '매체명',        type: 'str', cls: '' },
-  { key: 3, label: '광고명',        type: 'str', cls: 'ad-name' },
+  { key: 2, label: '매체명',        type: 'str', cls: '', searchable: true, placeholder: '매체명 검색…' },
+  { key: 3, label: '광고명',        type: 'str', cls: 'ad-name', searchable: true, placeholder: '광고명 검색…' },
   { key: 4, label: '광고료',        type: 'num', cls: 'num' },
   { key: 5, label: '총액(VAT포함)', type: 'num', cls: 'num' },
 ];
 const MEDIA_TABLE_COLS = [
   { key: 0, label: '연도',          type: 'num', cls: '' },
   { key: 1, label: '기관분류',      type: 'str', cls: 'muted' },
-  { key: 2, label: '기관명',        type: 'str', cls: '' },
-  { key: 3, label: '광고명',        type: 'str', cls: 'ad-name' },
+  { key: 2, label: '기관명',        type: 'str', cls: '', searchable: true, placeholder: '기관명 검색…' },
+  { key: 3, label: '광고명',        type: 'str', cls: 'ad-name', searchable: true, placeholder: '광고명 검색…' },
   { key: 4, label: '광고료',        type: 'num', cls: 'num' },
   { key: 5, label: '총액(VAT포함)', type: 'num', cls: 'num' },
 ];
@@ -990,14 +999,20 @@ function buildRawTableHTML(cols, subtitle) {
     const cls = c.type === 'num' ? 'num' : '';
     return `<th data-key="${c.key}" data-type="${c.type}" class="${cls}">${escapeHTML(c.label)}</th>`;
   }).join('');
+  const searchInputs = cols.filter(c => c.searchable).map(c =>
+    `<input type="text" class="raw-search" data-col="${c.key}" placeholder="${escapeHTML(c.placeholder || c.label + ' 검색…')}" />`
+  ).join('');
   return `
     <div class="card raw-table-card">
       <div class="raw-table-header">
         <div>
           <h3 class="chart-title">세부 광고 집행 내역</h3>
-          <p class="chart-sub">${escapeHTML(subtitle)} · 컬럼 헤더 클릭 시 정렬</p>
+          <p class="chart-sub">${escapeHTML(subtitle)} · 컬럼 헤더 클릭 시 정렬 · 검색은 실시간</p>
         </div>
-        <input type="text" class="raw-search" placeholder="광고명 검색…" />
+        <div class="raw-search-row">
+          ${searchInputs}
+          <button class="raw-clear" type="button">초기화</button>
+        </div>
       </div>
       <div class="raw-loading">세부 내역 불러오는 중…</div>
       <div class="raw-table-wrap" style="display:none">
@@ -1041,14 +1056,15 @@ function bindRawTable(card, raw, cols, yearSet) {
   const tbody = card.querySelector('tbody');
   const countEl = card.querySelector('.raw-table-count');
   const moreBtn = card.querySelector('.raw-load-more');
-  const searchInput = card.querySelector('.raw-search');
+  const searchInputs = card.querySelectorAll('.raw-search');
+  const clearBtn = card.querySelector('.raw-clear');
   const tableWrap = card.querySelector('.raw-table-wrap');
   const footer = card.querySelector('.raw-table-footer');
   const loading = card.querySelector('.raw-loading');
 
   let sortKey = 5;   // 총액
   let sortDesc = true;
-  let searchTerm = '';
+  const searchTerms = new Map();  // colKey -> term (lowercase)
   let visibleCount = PAGE_SIZE;
   let lastFiltered = raw.rows;
 
@@ -1057,9 +1073,10 @@ function bindRawTable(card, raw, cols, yearSet) {
     if (yearSet && yearSet.size > 0) {
       rows = rows.filter(r => yearSet.has(r[0]));
     }
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      rows = rows.filter(r => String(r[3]).toLowerCase().includes(q));
+    // 컬럼별 substring 검색 (AND)
+    for (const [colKey, term] of searchTerms) {
+      if (!term) continue;
+      rows = rows.filter(r => String(r[colKey]).toLowerCase().includes(term));
     }
     rows = rows.slice().sort((a, b) => {
       const av = a[sortKey], bv = b[sortKey];
@@ -1083,8 +1100,12 @@ function bindRawTable(card, raw, cols, yearSet) {
       }).join('');
       return `<tr>${tds}</tr>`;
     }).join('');
+    const activeFilters =
+      (yearSet && yearSet.size > 0 && yearSet.size < STATE.agg.years.length ? 1 : 0) +
+      [...searchTerms.values()].filter(t => t).length;
+    const suffix = activeFilters > 0 ? ` (필터 ${activeFilters}개 적용)` : '';
     countEl.textContent =
-      `${fmtInt(visible.length)} / ${fmtInt(lastFiltered.length)}건 · 총 ${fmtInt(raw.rows.length)}건`;
+      `${fmtInt(visible.length)} / ${fmtInt(lastFiltered.length)}건 · 총 ${fmtInt(raw.rows.length)}건${suffix}`;
     moreBtn.style.display = visible.length < lastFiltered.length ? 'inline-block' : 'none';
   }
 
@@ -1105,15 +1126,29 @@ function bindRawTable(card, raw, cols, yearSet) {
     });
   });
 
-  let searchTimer = null;
-  searchInput.addEventListener('input', e => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      searchTerm = e.target.value.trim();
+  // 컬럼별 검색 입력 (debounce 120ms)
+  const timers = new Map();
+  searchInputs.forEach(input => {
+    const colKey = parseInt(input.dataset.col);
+    input.addEventListener('input', e => {
+      clearTimeout(timers.get(colKey));
+      timers.set(colKey, setTimeout(() => {
+        searchTerms.set(colKey, e.target.value.trim().toLowerCase());
+        visibleCount = PAGE_SIZE;
+        render();
+      }, 120));
+    });
+  });
+
+  // 초기화 버튼
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      searchInputs.forEach(i => { i.value = ''; });
+      searchTerms.clear();
       visibleCount = PAGE_SIZE;
       render();
-    }, 150);
-  });
+    });
+  }
 
   moreBtn.addEventListener('click', () => {
     visibleCount += PAGE_SIZE;
