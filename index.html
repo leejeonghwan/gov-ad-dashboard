@@ -189,6 +189,7 @@
   }
   .chart { width: 100%; height: 320px; }
   .chart-tall { height: 480px; }
+  .chart-xtall { height: 760px; }
 
   /* ============ SEARCH ============ */
   .search-box {
@@ -509,14 +510,14 @@
 
     <div class="grid-2">
       <div class="card">
-        <h3 class="chart-title">광고주 Top 30 (총액 기준).</h3>
+        <h3 class="chart-title">광고주 상위 50 (총액 기준, 단위: 억 원).</h3>
         <p class="chart-sub">가장 많이 집행한 발주 기관.</p>
-        <div class="chart chart-tall" id="chart-top-agencies"></div>
+        <div class="chart chart-xtall" id="chart-top-agencies"></div>
       </div>
       <div class="card">
-        <h3 class="chart-title">매체 Top 30 (수주액 기준).</h3>
+        <h3 class="chart-title">매체 상위 50 (수주액 기준, 단위: 억 원).</h3>
         <p class="chart-sub">가장 많이 수주한 언론·매체.</p>
-        <div class="chart chart-tall" id="chart-top-media"></div>
+        <div class="chart chart-xtall" id="chart-top-media"></div>
       </div>
     </div>
 
@@ -814,6 +815,11 @@ function fmtInt(n) {
   if (n == null) return '-';
   return n.toLocaleString('ko-KR');
 }
+function fmtBillion(n) {
+  // 원 → 억 단위 정수, 천 단위 콤마
+  if (n == null || isNaN(n)) return '-';
+  return Math.round(n / 1e8).toLocaleString('ko-KR');
+}
 
 // ============ 데이터 로드 ============
 async function loadData() {
@@ -1010,17 +1016,17 @@ function renderMarket() {
   // 4. 기관분류 누적
   renderStackedBar('chart-atype-stack', atypeYear, sortedYears);
 
-  // 5. Top 30 광고주
-  const top30Ag = [...agencyAgg.entries()]
-    .sort((a, b) => b[1] - a[1]).slice(0, 30)
+  // 5. 상위 50 광고주 (단위: 억 원)
+  const topAg = [...agencyAgg.entries()]
+    .sort((a, b) => b[1] - a[1]).slice(0, 50)
     .map(([idx, v]) => ({ name: ag.agencies[idx], value: v })).reverse();
-  renderHBar('chart-top-agencies', top30Ag, '#58a6ff');
+  renderHBar('chart-top-agencies', topAg, '#58a6ff', { unit: 'billion' });
 
-  // 6. Top 30 매체
-  const top30Med = [...mediaAgg.entries()]
-    .sort((a, b) => b[1] - a[1]).slice(0, 30)
+  // 6. 상위 50 매체 (단위: 억 원)
+  const topMed = [...mediaAgg.entries()]
+    .sort((a, b) => b[1] - a[1]).slice(0, 50)
     .map(([idx, v]) => ({ name: ag.media[idx], value: v })).reverse();
-  renderHBar('chart-top-media', top30Med, '#f78166');
+  renderHBar('chart-top-media', topMed, '#f78166', { unit: 'billion' });
 }
 
 function renderStackedBar(id, map, years) {
@@ -1041,12 +1047,16 @@ function renderStackedBar(id, map, years) {
   }, true);
 }
 
-function renderHBar(id, data, color) {
+function renderHBar(id, data, color, opts = {}) {
+  // opts.unit: 'billion' → 막대 라벨/x축에 억 단위 정수 표시 (단위 텍스트 없음)
+  //                       tooltip은 원 단위 정확값 유지
+  const useBillion = opts.unit === 'billion';
+  const valueFormatter = useBillion ? fmtBillion : fmtKRW;
   getChart(id).setOption({
     ...ECHARTS_BASE,
     grid: { left: 140, right: 60, top: 12, bottom: 24 },
     tooltip: itemTooltipFor(p => `${p.name}<br>${fmtKRWFull(p.value)}`),
-    xAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: fmtKRW } },
+    xAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: valueFormatter } },
     yAxis: { type: 'category', data: data.map(d => d.name), ...AXIS_STYLE,
       axisLabel: { ...AXIS_STYLE.axisLabel, fontSize: 11, width: 130, overflow: 'truncate' } },
     series: [{
@@ -1054,7 +1064,7 @@ function renderHBar(id, data, color) {
       data: data.map(d => d.value),
       itemStyle: { color },
       label: { show: true, position: 'right', color: getCssVar('--text-muted'), fontSize: 10,
-        formatter: p => fmtKRW(p.value) },
+        formatter: p => valueFormatter(p.value) },
     }],
   }, true);
 }
