@@ -548,6 +548,18 @@
       </div>
     </div>
 
+    <!-- 정권별 매체 비교 -->
+    <div class="card">
+      <h3 class="chart-title">정권별 주요 매체 광고 집행 추이 (단위: 억 원).</h3>
+      <p class="chart-sub">2022년 5월 윤석열 정부 출범. 범례 클릭으로 매체별 표시/숨김. 위 필터와 무관하게 전체 데이터 기준.</p>
+      <div class="chart chart-tall" id="chart-regime-media"></div>
+    </div>
+    <div class="card">
+      <h3 class="chart-title">정권 평균 비교 (단위: 억 원 / 연평균).</h3>
+      <p class="chart-sub">문재인 정부 3년(2019–2021) vs 윤석열 정부 3년(2023–2025). 2022·2026은 부분 데이터라 평균에서 제외. 컬럼 헤더 클릭 정렬.</p>
+      <div class="raw-table-wrap" id="table-regime-media"></div>
+    </div>
+
   </section>
 
   <!-- ===== AGENCY TAB ===== -->
@@ -1053,6 +1065,9 @@ function renderMarket() {
     .sort((a, b) => b[1] - a[1]).slice(0, 50)
     .map(([idx, v]) => ({ name: ag.media[idx], value: v })).reverse();
   renderHBar('chart-top-media', topMed, '#f78166', { unit: 'billion' });
+
+  // 7. 정권별 주요 매체 비교 (필터와 무관, 전체 데이터 기준)
+  renderRegimeMedia();
 }
 
 function renderStackedBar(id, map, years) {
@@ -1189,6 +1204,215 @@ function setupSearch(inputId, suggId, totals, onSelect) {
 
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============ 정권별 주요 매체 비교 ============
+// 매체명 변형이 많아 group마다 정확한 매칭 함수 정의.
+// 같은 매체의 본사·지역사·라디오·계열 매거진 등을 한 그룹으로 합산.
+const REGIME_MEDIA_GROUPS = [
+  { id: 'chosun',     name: '조선일보',   color: '#58a6ff',
+    match: m => /^조선일보/.test(m) || /^(디지틀조선일보|월간조선|주간조선|스포츠조선|여성조선|어린이조선일보|IT조선|조선비즈|조선닷컴)/.test(m) },
+  { id: 'joongang',   name: '중앙일보',   color: '#bc8cff',
+    match: m => /^중앙일보/.test(m) || /^(월간중앙|중앙선데이|코리아중앙데일리|KOREA JOONGANG DAILY)/.test(m) },
+  { id: 'donga',      name: '동아일보',   color: '#f78166',
+    match: m => /^동아일보/.test(m) || /^(동아닷컴|신동아|주간동아|스포츠동아|IT동아|동아연감|과학동아|여성동아|동아사이언스)/.test(m) },
+  { id: 'hani',       name: '한겨레',     color: '#3fb950',
+    match: m => /^한겨레/.test(m) && !/시사한겨레|캐나다/.test(m) },
+  { id: 'kyunghyang', name: '경향신문',   color: '#7ee787',
+    match: m => /^경향신문/.test(m) || /^(스포츠경향|주간경향|헬스경향)/.test(m) },
+  { id: 'kbs',        name: 'KBS',        color: '#79c0ff',
+    match: m => /^KBS\b/.test(m) },
+  { id: 'mbc',        name: 'MBC',        color: '#a371f7',
+    match: m => /^MBC\b/.test(m) },
+  { id: 'sbs',        name: 'SBS',        color: '#e3b341',
+    match: m => /^SBS\b/.test(m) },
+  { id: 'ebs',        name: 'EBS',        color: '#d2a8ff',
+    match: m => /^EBS\b/.test(m) || /^교육방송\(EBS/.test(m) },
+  { id: 'jtbc',       name: 'JTBC',       color: '#ffa657',
+    match: m => /^JTBC\b/.test(m) },
+  { id: 'tvchosun',   name: 'TV조선',     color: '#f0883e',
+    match: m => /^TV조선/.test(m) },
+  { id: 'channela',   name: '채널A',      color: '#56d4dd',
+    match: m => m === '채널A' || m === '뉴스채널A' || /^채널A\b/.test(m) },
+  { id: 'mbn',        name: 'MBN',        color: '#ff7b72',
+    match: m => /^MBN\b/.test(m) && !/세자가/.test(m) },
+  { id: 'ytn',        name: 'YTN',        color: '#1f6feb',
+    match: m => /^YTN/.test(m) },
+  { id: 'yonhap_tv',  name: '연합뉴스TV', color: '#d29922',
+    match: m => /^연합뉴스TV/.test(m) },
+];
+
+// 디폴트 active: 종합지 5개 (조중동 + 한겨레+경향)
+const REGIME_DEFAULT_SELECTED = {
+  '조선일보': true, '중앙일보': true, '동아일보': true,
+  '한겨레': true, '경향신문': true,
+  'KBS': false, 'MBC': false, 'SBS': false, 'EBS': false,
+  'JTBC': false, 'TV조선': false, '채널A': false, 'MBN': false,
+  'YTN': false, '연합뉴스TV': false,
+};
+
+// 정권 구분 (5월 출범이지만 연도 단위 단순화)
+const MOON_YEARS = [2019, 2020, 2021];
+const YOON_YEARS = [2023, 2024, 2025];
+
+function computeRegimeMediaData() {
+  const ag = STATE.agg;
+  // 매체 idx → groupId 매칭 (한 번만)
+  const idxToGroup = new Map();
+  ag.media.forEach((m, idx) => {
+    for (const g of REGIME_MEDIA_GROUPS) {
+      if (g.match(m)) { idxToGroup.set(idx, g.id); break; }
+    }
+  });
+  // group × year → amount
+  const acc = new Map();
+  REGIME_MEDIA_GROUPS.forEach(g => acc.set(g.id, new Map()));
+  for (const r of ag.rows) {
+    const groupId = idxToGroup.get(r[4]);
+    if (!groupId) continue;
+    const year = ag.years[r[0]];
+    const yMap = acc.get(groupId);
+    yMap.set(year, (yMap.get(year) || 0) + r[5]);
+  }
+  return acc;
+}
+
+let _regimeTableState = { sortKey: 'yoonAvg', sortDesc: true };
+
+function renderRegimeMedia() {
+  const ag = STATE.agg;
+  const acc = computeRegimeMediaData();
+  const years = ag.years.slice().sort((a, b) => a - b);
+
+  // ===== 라인 차트 =====
+  const series = REGIME_MEDIA_GROUPS.map(g => ({
+    name: g.name,
+    type: 'line',
+    smooth: false,
+    symbolSize: 6,
+    data: years.map(y => Math.round((acc.get(g.id).get(y) || 0) / 1e8)),  // 억 단위
+    itemStyle: { color: g.color },
+    lineStyle: { color: g.color, width: 2 },
+    emphasis: { focus: 'series' },
+  }));
+
+  // 정권 boundary 시각화
+  const markArea = {
+    silent: true,
+    itemStyle: { color: 'rgba(63,185,80,0.06)' },
+    label: { color: getCssVar('--text-muted'), fontSize: 11, position: 'insideTopLeft' },
+    data: [
+      [{ xAxis: '2019', name: '문재인 정부' }, { xAxis: '2021' }],
+    ],
+  };
+  const markArea2 = {
+    silent: true,
+    itemStyle: { color: 'rgba(248,81,73,0.06)' },
+    label: { color: getCssVar('--text-muted'), fontSize: 11, position: 'insideTopRight' },
+    data: [
+      [{ xAxis: '2023', name: '윤석열 정부' }, { xAxis: '2025' }],
+    ],
+  };
+
+  getChart('chart-regime-media').setOption({
+    ...ECHARTS_BASE,
+    grid: { left: 60, right: 30, top: 60, bottom: 36 },
+    tooltip: {
+      ...TOOLTIP,
+      valueFormatter: v => v.toLocaleString('ko-KR') + '억 원',
+    },
+    legend: {
+      type: 'scroll', top: 0, selected: REGIME_DEFAULT_SELECTED,
+      textStyle: { color: getCssVar('--text-muted'), fontSize: 11 },
+    },
+    xAxis: {
+      type: 'category', data: years.map(String), ...AXIS_STYLE,
+      axisLabel: { ...AXIS_STYLE.axisLabel, interval: 0 },
+    },
+    yAxis: {
+      type: 'value', ...AXIS_STYLE,
+      axisLabel: { ...AXIS_STYLE.axisLabel,
+        formatter: v => v.toLocaleString('ko-KR') },
+    },
+    series: series.map((s, i) => i === 0
+      ? { ...s, markArea: { ...markArea, data: markArea.data.concat(markArea2.data) } }
+      : s),
+  }, true);
+
+  // ===== 정권 평균 비교 표 =====
+  const rows = REGIME_MEDIA_GROUPS.map(g => {
+    const yMap = acc.get(g.id);
+    const moonSum = MOON_YEARS.reduce((s, y) => s + (yMap.get(y) || 0), 0);
+    const yoonSum = YOON_YEARS.reduce((s, y) => s + (yMap.get(y) || 0), 0);
+    const moonAvg = moonSum / MOON_YEARS.length;
+    const yoonAvg = yoonSum / YOON_YEARS.length;
+    const diff = yoonAvg - moonAvg;
+    const pct = moonAvg > 0 ? (diff / moonAvg) * 100 : null;
+    return { name: g.name, moonAvg, yoonAvg, diff, pct };
+  });
+  renderRegimeTable(rows);
+}
+
+function renderRegimeTable(rows) {
+  const { sortKey, sortDesc } = _regimeTableState;
+  const sorted = rows.slice().sort((a, b) => {
+    if (sortKey === 'name') {
+      return sortDesc ? b.name.localeCompare(a.name, 'ko') : a.name.localeCompare(b.name, 'ko');
+    }
+    const av = a[sortKey] ?? -Infinity;
+    const bv = b[sortKey] ?? -Infinity;
+    return sortDesc ? bv - av : av - bv;
+  });
+
+  const arrow = k => sortKey === k ? (sortDesc ? ' ▼' : ' ▲') : '';
+  const cellPct = r => {
+    if (r.pct == null) return '<td class="num muted">-</td>';
+    const sign = r.pct >= 0 ? '+' : '';
+    const color = r.pct >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<td class="num" style="color:${color}">${sign}${r.pct.toFixed(1)}%</td>`;
+  };
+  const cellDiff = r => {
+    const sign = r.diff >= 0 ? '+' : '';
+    const color = r.diff >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<td class="num" style="color:${color}">${sign}${fmtBillion(r.diff)}</td>`;
+  };
+
+  const tbody = sorted.map(r => `
+    <tr>
+      <td>${escapeHTML(r.name)}</td>
+      <td class="num">${fmtBillion(r.moonAvg)}</td>
+      <td class="num">${fmtBillion(r.yoonAvg)}</td>
+      ${cellDiff(r)}
+      ${cellPct(r)}
+    </tr>
+  `).join('');
+
+  document.getElementById('table-regime-media').innerHTML = `
+    <table class="raw-table">
+      <thead><tr>
+        <th data-sort="name">매체.${arrow('name')}</th>
+        <th class="num" data-sort="moonAvg">문재인 연평균.${arrow('moonAvg')}</th>
+        <th class="num" data-sort="yoonAvg">윤석열 연평균.${arrow('yoonAvg')}</th>
+        <th class="num" data-sort="diff">증감액.${arrow('diff')}</th>
+        <th class="num" data-sort="pct">증감률.${arrow('pct')}</th>
+      </tr></thead>
+      <tbody>${tbody}</tbody>
+    </table>
+  `;
+
+  document.querySelectorAll('#table-regime-media th[data-sort]').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const k = th.dataset.sort;
+      if (_regimeTableState.sortKey === k) {
+        _regimeTableState.sortDesc = !_regimeTableState.sortDesc;
+      } else {
+        _regimeTableState.sortKey = k;
+        _regimeTableState.sortDesc = k !== 'name';  // 이름은 오름차순 기본, 나머지 내림차순
+      }
+      renderRegimeTable(rows);
+    });
+  });
 }
 
 // ============ Raw 광고 내역 테이블 ============
