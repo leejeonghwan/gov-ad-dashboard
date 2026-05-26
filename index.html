@@ -1094,20 +1094,28 @@ function renderStackedBar(id, map, years) {
 function renderHBar(id, data, color, opts = {}) {
   // opts.unit: 'billion' → 막대 라벨/x축에 억 단위 정수 표시 (단위 텍스트 없음)
   //                       tooltip은 원 단위 정확값 유지
+  // opts.dense: true → 항목이 많을 때 라벨 모두 표시 + 막대 촘촘하게
   const useBillion = opts.unit === 'billion';
+  const dense = opts.dense || data.length >= 40;
   const valueFormatter = useBillion ? fmtBillion : fmtKRW;
+  const labelFontSize = dense ? 9.5 : 11;
   getChart(id).setOption({
     ...ECHARTS_BASE,
     grid: { left: 140, right: 60, top: 12, bottom: 24 },
     tooltip: itemTooltipFor(p => `${p.name}<br>${fmtKRWFull(p.value)}`),
     xAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: valueFormatter } },
     yAxis: { type: 'category', data: data.map(d => d.name), ...AXIS_STYLE,
-      axisLabel: { ...AXIS_STYLE.axisLabel, fontSize: 11, width: 130, overflow: 'truncate' } },
+      axisLabel: { ...AXIS_STYLE.axisLabel,
+        fontSize: labelFontSize, width: 130, overflow: 'truncate',
+        interval: 0,  // 모든 카테고리 라벨 표시 (자동 생략 방지)
+      } },
     series: [{
       type: 'bar',
       data: data.map(d => d.value),
       itemStyle: { color },
-      label: { show: true, position: 'right', color: getCssVar('--text-muted'), fontSize: 10,
+      barCategoryGap: dense ? '5%' : '20%',  // 항목 많을 때 막대 사이 좁게
+      label: { show: true, position: 'right', color: getCssVar('--text-muted'),
+        fontSize: dense ? 9 : 10,
         formatter: p => valueFormatter(p.value) },
     }],
   }, true);
