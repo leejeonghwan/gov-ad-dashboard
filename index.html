@@ -399,6 +399,14 @@
     white-space: nowrap;
   }
   .raw-table tr:hover td.ad-name { white-space: normal; overflow: visible; }
+  .raw-table .cell-link {
+    color: var(--accent); text-decoration: none;
+    border-bottom: 1px dotted transparent;
+    cursor: pointer;
+  }
+  .raw-table .cell-link:hover {
+    border-bottom-color: var(--accent);
+  }
   .raw-table-footer {
     display: flex; justify-content: space-between; align-items: center;
     margin-top: 12px; font-size: 12px; color: var(--text-dim);
@@ -1101,30 +1109,48 @@ function renderHBar(id, data, color, opts = {}) {
   // opts.unit: 'billion' → 막대 라벨/x축에 억 단위 정수 표시 (단위 텍스트 없음)
   //                       tooltip은 원 단위 정확값 유지
   // opts.dense: true → 항목이 많을 때 라벨 모두 표시 + 막대 촘촘하게
+  // opts.linkTo: 'agency' | 'media' → 막대/라벨 클릭 시 해당 detail로 이동
   const useBillion = opts.unit === 'billion';
   const dense = opts.dense || data.length >= 40;
+  const linkTo = opts.linkTo;
   const valueFormatter = useBillion ? fmtBillion : fmtKRW;
   const labelFontSize = dense ? 9.5 : 11;
-  getChart(id).setOption({
+  const chart = getChart(id);
+  chart.setOption({
     ...ECHARTS_BASE,
     grid: { left: 140, right: 60, top: 12, bottom: 24 },
-    tooltip: itemTooltipFor(p => `${p.name}<br>${fmtKRWFull(p.value)}`),
+    tooltip: itemTooltipFor(p => `${p.name}<br>${fmtKRWFull(p.value)}${linkTo ? '<br><span style="color:var(--accent);font-size:11px">클릭해서 상세 보기</span>' : ''}`),
     xAxis: { type: 'value', ...AXIS_STYLE, axisLabel: { ...AXIS_STYLE.axisLabel, formatter: valueFormatter } },
     yAxis: { type: 'category', data: data.map(d => d.name), ...AXIS_STYLE,
       axisLabel: { ...AXIS_STYLE.axisLabel,
         fontSize: labelFontSize, width: 130, overflow: 'truncate',
         interval: 0,  // 모든 카테고리 라벨 표시 (자동 생략 방지)
-      } },
+        triggerEvent: !!linkTo,
+      },
+      triggerEvent: !!linkTo,
+    },
     series: [{
       type: 'bar',
       data: data.map(d => d.value),
       itemStyle: { color },
+      cursor: linkTo ? 'pointer' : 'default',
       barCategoryGap: dense ? '5%' : '20%',  // 항목 많을 때 막대 사이 좁게
       label: { show: true, position: 'right', color: getCssVar('--text-muted'),
         fontSize: dense ? 9 : 10,
         formatter: p => valueFormatter(p.value) },
     }],
   }, true);
+
+  // 클릭 핸들러 (linkTo가 있을 때만)
+  chart.off('click');
+  if (linkTo) {
+    chart.on('click', params => {
+      let name = null;
+      if (params.componentType === 'series') name = params.name;
+      else if (params.componentType === 'yAxis') name = params.value;
+      if (name) navigateToEntity(linkTo, name);
+    });
+  }
 }
 
 // ============ 탭 전환 ============
@@ -1223,6 +1249,57 @@ function setupSearch(inputId, suggId, totals, onSelect) {
 
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============ 네비게이션 (셀/막대 → 해당 detail/필터) ============
+function activateTab(tabName) {
+  const btn = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (btn) btn.click();
+}
+
+function navigateToEntity(kind, name) {
+  if (!name) return;
+  if (kind === 'agency' || kind === 'media') {
+    const totals = kind === 'agency' ? STATE.agencyTotals : STATE.mediaTotals;
+    const entry = totals.find(t => t.name === name);
+    if (!entry) {
+      console.warn('navigate: entity not found', kind, name);
+      return;
+    }
+    activateTab(kind);
+    const input = document.getElementById(`search-${kind}`);
+    if (input) input.value = name;
+    // 인증 안 됐어도 탭 진입 시 로그인 폼이 뜨고, 통과 후 사용자가 다시 선택해야 함.
+    // 인증 상태면 즉시 detail 렌더.
+    if (STATE.authed) {
+      if (kind === 'agency') renderAgencyDetail(entry);
+      else renderMediaDetail(entry);
+      // detail 카드가 보이도록 스크롤
+      setTimeout(() => {
+        document.getElementById(`detail-${kind}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    }
+  } else if (kind === 'mtype' || kind === 'atype') {
+    applyMainFilterSingle(kind, name);
+  }
+}
+
+function applyMainFilterSingle(kind, value) {
+  // 해당 분류만 단독 선택. 다른 두 필터 카테고리(연도/매체구분/기관분류)는 전체 유지.
+  if (kind === 'mtype') {
+    STATE.filters.mtypes.clear();
+    STATE.filters.mtypes.add(value);
+  } else if (kind === 'atype') {
+    STATE.filters.atypes.clear();
+    STATE.filters.atypes.add(value);
+  }
+  renderFilters();
+  activateTab('market');
+  // 탭 핸들러가 차트 있으면 resize만 하니 직접 다시 그림
+  setTimeout(() => {
+    renderMarket();
+    document.querySelector('.filters')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
 }
 
 // ============ 정권별 주요 매체 비교 ============
@@ -1522,16 +1599,16 @@ function renderRegimeTable(rows) {
 // ============ Raw 광고 내역 테이블 ============
 const AGENCY_TABLE_COLS = [
   { key: 0, label: '연도.',           type: 'num', cls: '' },
-  { key: 1, label: '매체구분.',       type: 'str', cls: 'muted' },
-  { key: 2, label: '매체명.',         type: 'str', cls: '', searchable: true, placeholder: '매체명 검색…' },
+  { key: 1, label: '매체구분.',       type: 'str', cls: 'muted', linkTo: 'mtype' },
+  { key: 2, label: '매체명.',         type: 'str', cls: '', searchable: true, placeholder: '매체명 검색…', linkTo: 'media' },
   { key: 3, label: '광고명.',         type: 'str', cls: 'ad-name', searchable: true, placeholder: '광고명 검색…' },
   { key: 4, label: '광고료.',         type: 'num', cls: 'num' },
   { key: 5, label: '총액(VAT포함).',  type: 'num', cls: 'num' },
 ];
 const MEDIA_TABLE_COLS = [
   { key: 0, label: '연도.',           type: 'num', cls: '' },
-  { key: 1, label: '기관분류.',       type: 'str', cls: 'muted' },
-  { key: 2, label: '기관명.',         type: 'str', cls: '', searchable: true, placeholder: '기관명 검색…' },
+  { key: 1, label: '기관분류.',       type: 'str', cls: 'muted', linkTo: 'atype' },
+  { key: 2, label: '기관명.',         type: 'str', cls: '', searchable: true, placeholder: '기관명 검색…', linkTo: 'agency' },
   { key: 3, label: '광고명.',         type: 'str', cls: 'ad-name', searchable: true, placeholder: '광고명 검색…' },
   { key: 4, label: '광고료.',         type: 'num', cls: 'num' },
   { key: 5, label: '총액(VAT포함).',  type: 'num', cls: 'num' },
@@ -1646,9 +1723,16 @@ function bindRawTable(card, raw, cols, yearSet) {
     tbody.innerHTML = visible.map(r => {
       const tds = cols.map(c => {
         let val = r[c.key];
-        if (c.type === 'num') val = fmtInt(val);
-        else val = escapeHTML(val);
-        return `<td class="${c.cls}">${val}</td>`;
+        let display;
+        if (c.type === 'num') {
+          display = fmtInt(val);
+        } else {
+          const escaped = escapeHTML(val);
+          display = c.linkTo
+            ? `<a href="#" class="cell-link" data-kind="${c.linkTo}" data-name="${escaped}">${escaped}</a>`
+            : escaped;
+        }
+        return `<td class="${c.cls}">${display}</td>`;
       }).join('');
       return `<tr>${tds}</tr>`;
     }).join('');
@@ -1705,6 +1789,14 @@ function bindRawTable(card, raw, cols, yearSet) {
   moreBtn.addEventListener('click', () => {
     visibleCount += PAGE_SIZE;
     render();
+  });
+
+  // 셀 링크 클릭 (이벤트 위임)
+  tbody.addEventListener('click', e => {
+    const a = e.target.closest('.cell-link');
+    if (!a) return;
+    e.preventDefault();
+    navigateToEntity(a.dataset.kind, a.dataset.name);
   });
 
   // 초기 정렬 표시
@@ -1843,7 +1935,7 @@ function renderAgencyContent() {
     }],
   }, true);
 
-  renderHBar('ag-top-media', topMedia, '#f78166');
+  renderHBar('ag-top-media', topMedia, '#f78166', { linkTo: 'media' });
 
   // 세부 광고 집행 내역 (lazy load + 연도 필터 적용)
   appendRawTable('detail-agency', 'agency', entry.idx, AGENCY_TABLE_COLS,
@@ -1978,7 +2070,7 @@ function renderMediaContent() {
     }],
   }, true);
 
-  renderHBar('md-top-agencies', topAgencies, '#58a6ff');
+  renderHBar('md-top-agencies', topAgencies, '#58a6ff', { linkTo: 'agency' });
 
   // 세부 광고 집행 내역 (lazy load + 연도 필터 적용)
   appendRawTable('detail-media', 'media', entry.idx, MEDIA_TABLE_COLS,
