@@ -1077,13 +1077,13 @@ function renderMarket() {
   const topAg = [...agencyAgg.entries()]
     .sort((a, b) => b[1] - a[1]).slice(0, 50)
     .map(([idx, v]) => ({ name: ag.agencies[idx], value: v })).reverse();
-  renderHBar('chart-top-agencies', topAg, '#58a6ff', { unit: 'billion' });
+  renderHBar('chart-top-agencies', topAg, '#58a6ff', { unit: 'billion', linkTo: 'agency' });
 
   // 6. 상위 50 매체 (단위: 억 원)
   const topMed = [...mediaAgg.entries()]
     .sort((a, b) => b[1] - a[1]).slice(0, 50)
     .map(([idx, v]) => ({ name: ag.media[idx], value: v })).reverse();
-  renderHBar('chart-top-media', topMed, '#f78166', { unit: 'billion' });
+  renderHBar('chart-top-media', topMed, '#f78166', { unit: 'billion', linkTo: 'media' });
 
 }
 
