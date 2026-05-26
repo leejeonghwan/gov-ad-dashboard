@@ -100,6 +100,13 @@
     color: var(--text); line-height: 1.2;
   }
   h1.headline .em { color: var(--accent); }
+  .headline-sub {
+    font-size: 15px; font-weight: 500; color: var(--text-muted);
+    margin-top: 10px; letter-spacing: -0.01em; line-height: 1.4;
+  }
+  .site-actions {
+    display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+  }
   .site-meta {
     font-size: 12px; color: var(--text-dim); text-align: right;
     font-variant-numeric: tabular-nums; line-height: 1.6;
@@ -456,17 +463,14 @@
     <div class="brand">
       <div class="site-title">정부광고 데이터 대시보드.</div>
       <h1 class="headline">8년의 <span class="em">정부광고</span>, 누가 받고 어디로 갔나.</h1>
+      <p class="headline-sub">정부 광고 154만 건, 8.4조 원 집행 내역 전수 분석.</p>
     </div>
-    <div class="site-meta site-meta-wrap">
-      2019 — 2026 / 한국언론진흥재단 정부광고 집행내역.<br>
-      <a href="https://www.kpf.or.kr" target="_blank">한국언론진흥재단.</a>
-      <div>
-        <button class="theme-toggle" id="theme-toggle" aria-label="테마 전환">
-          <span class="theme-toggle-icon" id="theme-toggle-icon">☾</span>
-          <span id="theme-toggle-label">라이트 모드.</span>
-        </button>
-        <button class="logout-btn" id="logout-btn" style="display:none">로그아웃.</button>
-      </div>
+    <div class="site-actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="테마 전환">
+        <span class="theme-toggle-icon" id="theme-toggle-icon">☾</span>
+        <span id="theme-toggle-label">라이트 모드.</span>
+      </button>
+      <button class="logout-btn" id="logout-btn" style="display:none">로그아웃.</button>
     </div>
   </div>
 </header>
@@ -618,8 +622,7 @@
 
 <footer>
   <div class="container">
-    <div>데이터 출처: 한국언론진흥재단 정부광고 집행내역 공시 (2019–2026년 연도별 XLSX 8개 병합).</div>
-    <div>본 대시보드는 공시 데이터를 기반으로 한 비공식 분석 도구입니다. 제작·운영: <a href="https://slownews.net" target="_blank">슬로우뉴스</a>. 코드: <a href="https://github.com/leejeonghwan/gov-ad-dashboard" target="_blank">github.com/leejeonghwan/gov-ad-dashboard</a></div>
+    <div>데이터 출처: <a href="https://www.kpf.or.kr" target="_blank">한국언론진흥재단</a>. 제작·분석: <a href="https://slownews.net" target="_blank">슬로우뉴스</a>.</div>
   </div>
 </footer>
 
