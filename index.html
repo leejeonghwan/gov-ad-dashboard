@@ -561,12 +561,12 @@
     </div>
     <div class="card">
       <h3 class="chart-title">정권 평균 비교 (단위: 억 원 / 연평균).</h3>
-      <p class="chart-sub">문재인 정부 3년(2019–2021) vs 윤석열 정부 3년(2023–2025). 2022·2026은 부분 데이터라 평균에서 제외. 컬럼 헤더 클릭 정렬.</p>
+      <p class="chart-sub">문재인 정부 39개월(2019.1–2022.3) vs 윤석열 정부 38개월(2022.4–2025.5). 광고시작일 기준 월 단위 정확 합산 후 ×12 환산. 컬럼 헤더 클릭 정렬.</p>
       <div class="raw-table-wrap" id="table-regime-media"></div>
     </div>
     <div class="card">
       <h3 class="chart-title">연도별 월평균 광고 집행 (단위: 억 원/월).</h3>
-      <p class="chart-sub">매체별 연 단위를 월평균으로 환산. 정권 칼럼은 36개월(3년) 평균. 2022(전환기)·2026(부분 데이터)은 표시만 하고 정권 평균에서는 제외.</p>
+      <p class="chart-sub">매체별 연 단위를 월평균으로 환산. 우측 정권 칼럼은 광고시작일 기준 정확한 임기 구간 평균(문 39개월 / 윤 38개월). 회색 칼럼(2022·2026)은 정권 평균에서 제외.</p>
       <div class="raw-table-wrap" id="table-regime-monthly"></div>
     </div>
   </section>
@@ -669,6 +669,7 @@ const STATE = {
   rawCache: new Map(),  // key: `agency-${idx}` / `media-${idx}` → fetched JSON
   rawToken: 0,          // 진입 race condition 방지
   authed: false,
+  regimeMonthly: null,  // {그룹명: {"YYYY-MM": amount}} (공개)
 };
 
 // ============ 인증 관리 ============
@@ -1269,39 +1270,51 @@ const REGIME_DEFAULT_SELECTED = {
   'YTN': false, '연합뉴스TV': false,
 };
 
-// 정권 구분 (5월 출범이지만 연도 단위 단순화)
-const MOON_YEARS = [2019, 2020, 2021];
-const YOON_YEARS = [2023, 2024, 2025];
+// 정권 구간 (월 단위 정확)
+//  - 문재인: 2019.01 ~ 2022.03  → 39개월
+//  - 윤석열: 2022.04 ~ 2025.05  → 38개월
+const REGIME_MOON = { start: '2019-01', end: '2022-03', label: '문재인 (2019.1~2022.3)' };
+const REGIME_YOON = { start: '2022-04', end: '2025-05', label: '윤석열 (2022.4~2025.5)' };
 
-function computeRegimeMediaData() {
-  const ag = STATE.agg;
-  // 매체 idx → groupId 매칭 (한 번만)
-  const idxToGroup = new Map();
-  ag.media.forEach((m, idx) => {
-    for (const g of REGIME_MEDIA_GROUPS) {
-      if (g.match(m)) { idxToGroup.set(idx, g.id); break; }
-    }
-  });
-  // group × year → amount
-  const acc = new Map();
-  REGIME_MEDIA_GROUPS.forEach(g => acc.set(g.id, new Map()));
-  for (const r of ag.rows) {
-    const groupId = idxToGroup.get(r[4]);
-    if (!groupId) continue;
-    const year = ag.years[r[0]];
-    const yMap = acc.get(groupId);
-    yMap.set(year, (yMap.get(year) || 0) + r[5]);
+function monthDiff(startYM, endYM) {
+  const [sy, sm] = startYM.split('-').map(Number);
+  const [ey, em] = endYM.split('-').map(Number);
+  return (ey - sy) * 12 + (em - sm) + 1;
+}
+const MOON_MONTHS = monthDiff(REGIME_MOON.start, REGIME_MOON.end);
+const YOON_MONTHS = monthDiff(REGIME_YOON.start, REGIME_YOON.end);
+
+function sumGroupRange(groupName, startYM, endYM) {
+  const monthly = (STATE.regimeMonthly || {})[groupName] || {};
+  let sum = 0;
+  for (const ym in monthly) {
+    if (ym >= startYM && ym <= endYM) sum += monthly[ym];
   }
-  return acc;
+  return sum;
+}
+function sumGroupYear(groupName, year) {
+  return sumGroupRange(groupName, `${year}-01`, `${year}-12`);
 }
 
 let _regimeTableState = { sortKey: 'yoonAvg', sortDesc: true };
 
-function renderRegimeMedia() {
-  const ag = STATE.agg;
-  const acc = computeRegimeMediaData();
-  // 2026은 부분 데이터(3월까지)라 차트에서 제외
-  const years = ag.years.slice().filter(y => y !== 2026).sort((a, b) => a - b);
+async function ensureRegimeMonthly() {
+  if (STATE.regimeMonthly) return STATE.regimeMonthly;
+  try {
+    const res = await fetch('data/regime_monthly.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    STATE.regimeMonthly = await res.json();
+  } catch (e) {
+    console.error('regime_monthly fetch error', e);
+    STATE.regimeMonthly = {};
+  }
+  return STATE.regimeMonthly;
+}
+
+async function renderRegimeMedia() {
+  await ensureRegimeMonthly();
+  // 라인 차트는 연 단위 (2026 제외)
+  const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
 
   // ===== 라인 차트 =====
   const series = REGIME_MEDIA_GROUPS.map(g => ({
@@ -1309,7 +1322,7 @@ function renderRegimeMedia() {
     type: 'line',
     smooth: false,
     symbolSize: 6,
-    data: years.map(y => Math.round((acc.get(g.id).get(y) || 0) / 1e8)),  // 억 단위
+    data: years.map(y => Math.round(sumGroupYear(g.name, y) / 1e8)),  // 억 단위
     itemStyle: { color: g.color },
     lineStyle: { color: g.color, width: 2 },
     emphasis: { focus: 'series' },
@@ -1358,39 +1371,38 @@ function renderRegimeMedia() {
       : s),
   }, true);
 
-  // ===== 정권 평균 비교 표 =====
+  // ===== 정권 평균 비교 표 (월 단위 정확) =====
+  // 연평균 = 월평균 × 12
   const rows = REGIME_MEDIA_GROUPS.map(g => {
-    const yMap = acc.get(g.id);
-    const moonSum = MOON_YEARS.reduce((s, y) => s + (yMap.get(y) || 0), 0);
-    const yoonSum = YOON_YEARS.reduce((s, y) => s + (yMap.get(y) || 0), 0);
-    const moonAvg = moonSum / MOON_YEARS.length;
-    const yoonAvg = yoonSum / YOON_YEARS.length;
+    const moonSum = sumGroupRange(g.name, REGIME_MOON.start, REGIME_MOON.end);
+    const yoonSum = sumGroupRange(g.name, REGIME_YOON.start, REGIME_YOON.end);
+    const moonMonthly = moonSum / MOON_MONTHS;
+    const yoonMonthly = yoonSum / YOON_MONTHS;
+    const moonAvg = moonMonthly * 12;  // 연평균
+    const yoonAvg = yoonMonthly * 12;
     const diff = yoonAvg - moonAvg;
     const pct = moonAvg > 0 ? (diff / moonAvg) * 100 : null;
-    return { name: g.name, moonAvg, yoonAvg, diff, pct };
+    return { name: g.name, moonAvg, yoonAvg, moonMonthly, yoonMonthly, diff, pct };
   });
   renderRegimeTable(rows);
-  renderRegimeMonthlyTable(acc);
+  renderRegimeMonthlyTable();
 }
 
-// ===== 연도별 월평균 표 (정권 칼럼 그룹) =====
-function renderRegimeMonthlyTable(acc) {
+// ===== 연도별 월평균 표 (정권 칼럼 그룹, 월 단위 정확) =====
+function renderRegimeMonthlyTable() {
   const transitionYears = new Set([2022, 2026]);
   // 연도별 월수 (2026은 1-3월 분, 나머지는 12개월)
   const monthsInYear = y => (y === 2026 ? 3 : 12);
   const yearsOrder = [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
   const rows = REGIME_MEDIA_GROUPS.map(g => {
-    const yMap = acc.get(g.id);
     const monthlyByYear = {};
     yearsOrder.forEach(y => {
-      const total = yMap.get(y) || 0;
+      const total = sumGroupYear(g.name, y);
       monthlyByYear[y] = total / monthsInYear(y) / 1e8;
     });
-    const moonTotal = MOON_YEARS.reduce((s, y) => s + (yMap.get(y) || 0), 0);
-    const yoonTotal = YOON_YEARS.reduce((s, y) => s + (yMap.get(y) || 0), 0);
-    const moonMonthly = moonTotal / 36 / 1e8;
-    const yoonMonthly = yoonTotal / 36 / 1e8;
+    const moonMonthly = sumGroupRange(g.name, REGIME_MOON.start, REGIME_MOON.end) / MOON_MONTHS / 1e8;
+    const yoonMonthly = sumGroupRange(g.name, REGIME_YOON.start, REGIME_YOON.end) / YOON_MONTHS / 1e8;
     const pct = moonMonthly > 0 ? ((yoonMonthly - moonMonthly) / moonMonthly) * 100 : null;
     return { name: g.name, monthlyByYear, moonMonthly, yoonMonthly, pct };
   });

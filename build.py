@@ -14,6 +14,7 @@
 출력:
     data/overview.json
     data/aggregate.json
+    data/regime_monthly.json (매체 그룹 × 월별, 광고시작일 기준 — 정권 비교용)
     data/agency/{idx}.json (광고주별 raw 행)
     data/media/{idx}.json  (매체별 raw 행)
 """
@@ -69,6 +70,95 @@ def load_all(files: list[tuple[int, Path]]) -> pd.DataFrame:
         parts.append(df)
         print(f"     → {len(df):,}행")
     return pd.concat(parts, ignore_index=True)
+
+
+def classify_regime_media(m: object) -> str | None:
+    """매체명을 정권 비교용 그룹 15개로 분류. index.html의 REGIME_MEDIA_GROUPS와 동일."""
+    if not isinstance(m, str):
+        return None
+    # 조선일보 계열
+    if m.startswith("조선일보"):
+        return "조선일보"
+    if m.startswith(("디지틀조선일보", "월간조선", "주간조선", "스포츠조선",
+                     "여성조선", "어린이조선일보", "IT조선", "조선비즈", "조선닷컴")):
+        return "조선일보"
+    # 중앙일보 계열
+    if m.startswith("중앙일보"):
+        return "중앙일보"
+    if m.startswith(("월간중앙", "중앙선데이", "코리아중앙데일리", "KOREA JOONGANG DAILY")):
+        return "중앙일보"
+    # 동아일보 계열
+    if m.startswith("동아일보"):
+        return "동아일보"
+    if m.startswith(("동아닷컴", "신동아", "주간동아", "스포츠동아", "IT동아",
+                     "동아연감", "과학동아", "여성동아", "동아사이언스")):
+        return "동아일보"
+    # 한겨레 (시사한겨레/캐나다 제외)
+    if m.startswith("한겨레") and "시사한겨레" not in m and "캐나다" not in m:
+        return "한겨레"
+    # 경향
+    if m.startswith("경향신문"):
+        return "경향신문"
+    if m.startswith(("스포츠경향", "주간경향", "헬스경향")):
+        return "경향신문"
+    # 단어 경계 검사 (예: KBS, KBS-2TV는 KBS / KBSXXX는 다른 매체)
+    def starts_with_word(s: str, prefix: str) -> bool:
+        if not s.startswith(prefix):
+            return False
+        tail = s[len(prefix):]
+        return tail == "" or not tail[0].isalpha()
+    if starts_with_word(m, "KBS"):
+        return "KBS"
+    if starts_with_word(m, "MBC"):
+        return "MBC"
+    if starts_with_word(m, "SBS"):
+        return "SBS"
+    if starts_with_word(m, "EBS") or m.startswith("교육방송(EBS"):
+        return "EBS"
+    if starts_with_word(m, "JTBC"):
+        return "JTBC"
+    if m.startswith("TV조선"):
+        return "TV조선"
+    if m in ("채널A", "뉴스채널A") or starts_with_word(m, "채널A"):
+        return "채널A"
+    if starts_with_word(m, "MBN") and "세자가" not in m:
+        return "MBN"
+    if m.startswith("YTN"):
+        return "YTN"
+    if m.startswith("연합뉴스TV"):
+        return "연합뉴스TV"
+    return None
+
+
+def build_regime_monthly(df: pd.DataFrame, out_path: Path) -> None:
+    """매체 그룹 × 연월 집계. 광고시작일(YYYYMMDD 정수) 기준."""
+    print("[추가] regime_monthly.json 생성 (매체 그룹 × 월)")
+    sub = df.copy()
+    # 광고시작일 정제 (정수형, 20000101~20301231 범위만)
+    sub["광고시작일"] = pd.to_numeric(sub["광고시작일"], errors="coerce")
+    sub = sub[(sub["광고시작일"] >= 20000101) & (sub["광고시작일"] <= 20301231)]
+    sub["연월"] = sub["광고시작일"].astype("int64").astype(str).str[:6]
+
+    # 매체 그룹 분류
+    sub["매체그룹"] = sub["매체명"].apply(classify_regime_media)
+    sub = sub[sub["매체그룹"].notna()]
+    print(f"      대상 행수(매체 그룹 매칭): {len(sub):,}")
+
+    grouped = sub.groupby(["매체그룹", "연월"])["총액"].sum().reset_index()
+    print(f"      집계 (매체그룹, 연월) 조합: {len(grouped):,}")
+
+    # 그룹별 dict로 변환: { "조선일보": { "2019-01": 12345, ... }, ... }
+    result: dict[str, dict[str, int]] = {}
+    for r in grouped.itertuples(index=False):
+        ym_iso = f"{r.연월[:4]}-{r.연월[4:]}"  # "201901" → "2019-01"
+        result.setdefault(r.매체그룹, {})[ym_iso] = int(r.총액)
+
+    out_path.write_text(
+        json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    size_kb = out_path.stat().st_size / 1024
+    print(f"      → {len(result)} 그룹, {size_kb:.1f}KB")
 
 
 def clean(df: pd.DataFrame) -> pd.DataFrame:
@@ -241,6 +331,9 @@ def main() -> None:
         json.dumps(aggregate, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
+
+    # === 정권별 비교용 월 단위 데이터 ===
+    build_regime_monthly(df, OUT_DIR / "regime_monthly.json")
 
     # === 광고주별/매체별 raw partition ===
     print("\n[추가] 광고주별 raw JSON 생성")
