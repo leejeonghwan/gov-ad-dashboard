@@ -484,6 +484,7 @@
 <nav class="tabs">
   <div class="tabs-inner">
     <button class="tab active" data-tab="market">전체 시장.</button>
+    <button class="tab" data-tab="regime">정권별 비교.</button>
     <button class="tab" data-tab="agency">광고주별 분석.</button>
     <button class="tab" data-tab="media">매체별 분석.</button>
   </div>
@@ -548,10 +549,14 @@
       </div>
     </div>
 
-    <!-- 정권별 매체 비교 -->
+  </section>
+
+  <!-- ===== REGIME TAB ===== -->
+  <section class="panel" id="panel-regime">
+    <h2 class="section-title">정권별 매체 비교.</h2>
     <div class="card">
       <h3 class="chart-title">정권별 주요 매체 광고 집행 추이 (단위: 억 원).</h3>
-      <p class="chart-sub">2022년 5월 윤석열 정부 출범. 범례 클릭으로 매체별 표시/숨김. 위 필터와 무관하게 전체 데이터 기준.</p>
+      <p class="chart-sub">2022년 5월 윤석열 정부 출범. 범례 클릭으로 매체별 표시/숨김. 2026은 부분 데이터(3월까지)라 차트에서 제외.</p>
       <div class="chart chart-tall" id="chart-regime-media"></div>
     </div>
     <div class="card">
@@ -559,7 +564,6 @@
       <p class="chart-sub">문재인 정부 3년(2019–2021) vs 윤석열 정부 3년(2023–2025). 2022·2026은 부분 데이터라 평균에서 제외. 컬럼 헤더 클릭 정렬.</p>
       <div class="raw-table-wrap" id="table-regime-media"></div>
     </div>
-
   </section>
 
   <!-- ===== AGENCY TAB ===== -->
@@ -832,6 +836,7 @@ function redrawAllCharts() {
   if (!activeTab) return;
   const tab = activeTab.dataset.tab;
   if (tab === 'market') renderMarket();
+  else if (tab === 'regime') renderRegimeMedia();
   else if (tab === 'agency' && STATE.selectedAgency) renderAgencyContent();
   else if (tab === 'media' && STATE.selectedMedia) renderMediaContent();
 }
@@ -1066,8 +1071,6 @@ function renderMarket() {
     .map(([idx, v]) => ({ name: ag.media[idx], value: v })).reverse();
   renderHBar('chart-top-media', topMed, '#f78166', { unit: 'billion' });
 
-  // 7. 정권별 주요 매체 비교 (필터와 무관, 전체 데이터 기준)
-  renderRegimeMedia();
 }
 
 function renderStackedBar(id, map, years) {
@@ -1119,13 +1122,15 @@ function setupTabs() {
       b.classList.add('active');
       document.getElementById('panel-' + b.dataset.tab).classList.add('active');
       const tab = b.dataset.tab;
-      // detail 탭으로 돌아갈 때 차트가 dispose돼 있으면 재렌더
+      // 탭으로 돌아갈 때 차트가 dispose 또는 미생성이면 재렌더
       if (tab === 'agency' && STATE.selectedAgency && !STATE.charts['ag-yearly']) {
         renderAgencyContent();
       } else if (tab === 'media' && STATE.selectedMedia && !STATE.charts['md-yearly']) {
         renderMediaContent();
       } else if (tab === 'market' && !STATE.charts['chart-yearly']) {
         renderMarket();
+      } else if (tab === 'regime' && !STATE.charts['chart-regime-media']) {
+        renderRegimeMedia();
       } else {
         setTimeout(() => Object.values(STATE.charts).forEach(c => c.resize()), 0);
       }
@@ -1282,7 +1287,8 @@ let _regimeTableState = { sortKey: 'yoonAvg', sortDesc: true };
 function renderRegimeMedia() {
   const ag = STATE.agg;
   const acc = computeRegimeMediaData();
-  const years = ag.years.slice().sort((a, b) => a - b);
+  // 2026은 부분 데이터(3월까지)라 차트에서 제외
+  const years = ag.years.slice().filter(y => y !== 2026).sort((a, b) => a - b);
 
   // ===== 라인 차트 =====
   const series = REGIME_MEDIA_GROUPS.map(g => ({
