@@ -564,6 +564,11 @@
       <p class="chart-sub">문재인 정부 3년(2019–2021) vs 윤석열 정부 3년(2023–2025). 2022·2026은 부분 데이터라 평균에서 제외. 컬럼 헤더 클릭 정렬.</p>
       <div class="raw-table-wrap" id="table-regime-media"></div>
     </div>
+    <div class="card">
+      <h3 class="chart-title">연도별 월평균 광고 집행 (단위: 억 원/월).</h3>
+      <p class="chart-sub">매체별 연 단위를 월평균으로 환산. 정권 칼럼은 36개월(3년) 평균. 2022(전환기)·2026(부분 데이터)은 표시만 하고 정권 평균에서는 제외.</p>
+      <div class="raw-table-wrap" id="table-regime-monthly"></div>
+    </div>
   </section>
 
   <!-- ===== AGENCY TAB ===== -->
@@ -1365,6 +1370,79 @@ function renderRegimeMedia() {
     return { name: g.name, moonAvg, yoonAvg, diff, pct };
   });
   renderRegimeTable(rows);
+  renderRegimeMonthlyTable(acc);
+}
+
+// ===== 연도별 월평균 표 (정권 칼럼 그룹) =====
+function renderRegimeMonthlyTable(acc) {
+  const transitionYears = new Set([2022, 2026]);
+  // 연도별 월수 (2026은 1-3월 분, 나머지는 12개월)
+  const monthsInYear = y => (y === 2026 ? 3 : 12);
+  const yearsOrder = [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+
+  const rows = REGIME_MEDIA_GROUPS.map(g => {
+    const yMap = acc.get(g.id);
+    const monthlyByYear = {};
+    yearsOrder.forEach(y => {
+      const total = yMap.get(y) || 0;
+      monthlyByYear[y] = total / monthsInYear(y) / 1e8;
+    });
+    const moonTotal = MOON_YEARS.reduce((s, y) => s + (yMap.get(y) || 0), 0);
+    const yoonTotal = YOON_YEARS.reduce((s, y) => s + (yMap.get(y) || 0), 0);
+    const moonMonthly = moonTotal / 36 / 1e8;
+    const yoonMonthly = yoonTotal / 36 / 1e8;
+    const pct = moonMonthly > 0 ? ((yoonMonthly - moonMonthly) / moonMonthly) * 100 : null;
+    return { name: g.name, monthlyByYear, moonMonthly, yoonMonthly, pct };
+  });
+
+  const fmt = v => v == null ? '-' : v.toFixed(1);
+
+  const tbody = rows.map(r => {
+    const cells = yearsOrder.map(y => {
+      const cls = transitionYears.has(y) ? 'num muted' : 'num';
+      return `<td class="${cls}">${fmt(r.monthlyByYear[y])}</td>`;
+    }).join('');
+    const pctText = r.pct == null ? '-' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(1) + '%';
+    const pctColor = r.pct == null ? ''
+      : `color:${r.pct >= 0 ? 'var(--green)' : 'var(--red)'}`;
+    return `
+      <tr>
+        <td>${escapeHTML(r.name)}</td>
+        ${cells}
+        <td class="num" style="font-weight:600">${fmt(r.moonMonthly)}</td>
+        <td class="num" style="font-weight:600">${fmt(r.yoonMonthly)}</td>
+        <td class="num" style="${pctColor};font-weight:600">${pctText}</td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('table-regime-monthly').innerHTML = `
+    <table class="raw-table">
+      <thead>
+        <tr>
+          <th rowspan="2">매체.</th>
+          <th class="num" colspan="3" style="text-align:center">문재인 정부.</th>
+          <th class="num muted" style="text-align:center">전환.</th>
+          <th class="num" colspan="3" style="text-align:center">윤석열 정부.</th>
+          <th class="num muted" style="text-align:center">부분.</th>
+          <th class="num" rowspan="2">문재인<br>월평균.</th>
+          <th class="num" rowspan="2">윤석열<br>월평균.</th>
+          <th class="num" rowspan="2">증감.</th>
+        </tr>
+        <tr>
+          <th class="num">2019</th>
+          <th class="num">2020</th>
+          <th class="num">2021</th>
+          <th class="num muted">2022</th>
+          <th class="num">2023</th>
+          <th class="num">2024</th>
+          <th class="num">2025</th>
+          <th class="num muted">2026</th>
+        </tr>
+      </thead>
+      <tbody>${tbody}</tbody>
+    </table>
+  `;
 }
 
 function renderRegimeTable(rows) {
