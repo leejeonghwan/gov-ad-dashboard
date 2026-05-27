@@ -293,15 +293,20 @@
   }
   .placeholder-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 
-  /* ============ PREVIEW BANNER (본문 하단, 블루 계열) ============ */
+  /* ============ PREVIEW BANNER (푸터 바로 위, 블루 계열) ============ */
   .preview-banner {
     background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
     border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
     border-radius: 8px;
     color: var(--text); font-size: 13px;
     padding: 14px 20px; text-align: left;
-    margin: 40px 0 24px;
+    max-width: 1400px; margin: 40px auto 24px;
     line-height: 1.6;
+    /* 헤더/푸터의 좌우 padding(48px)에 맞춘 외부 여백 */
+    box-sizing: border-box;
+  }
+  @media (min-width: 901px) {
+    .preview-banner { margin-left: 48px; margin-right: 48px; max-width: calc(1400px - 96px); }
   }
   .preview-banner strong { color: var(--accent); font-weight: 700; }
   .preview-banner.exhausted {
@@ -826,8 +831,8 @@ function updatePreviewBanner() {
     banner = document.createElement('div');
     banner.id = 'preview-banner';
     banner.className = 'preview-banner';
-    // 본문 하단(.container 마지막)에 배치 — footer 직전, 모든 탭에서 동일하게 표시
-    document.querySelector('.container').appendChild(banner);
+    // 푸터 바로 위에 배치 — body 직속, 모든 탭에서 동일하게 표시
+    document.querySelector('footer').insertAdjacentElement('beforebegin', banner);
   }
   if (left > 0) {
     banner.classList.remove('exhausted');
