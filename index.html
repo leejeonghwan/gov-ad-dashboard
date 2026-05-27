@@ -100,6 +100,11 @@
     color: var(--text); line-height: 1.2;
   }
   h1.headline .em { color: var(--accent); }
+  .headline-link {
+    color: inherit; text-decoration: none;
+    transition: opacity 0.15s;
+  }
+  .headline-link:hover { opacity: 0.85; }
   .headline-sub {
     font-size: 15px; font-weight: 500; color: var(--text-muted);
     margin-top: 10px; letter-spacing: -0.01em; line-height: 1.4;
@@ -470,7 +475,7 @@
     </a>
     <div class="brand">
       <div class="site-title">정부광고 데이터 대시보드.</div>
-      <h1 class="headline">8년의 <span class="em">정부 광고</span>, 누가 주고 누가 받았나.</h1>
+      <h1 class="headline"><a href="/adserver/" class="headline-link" title="대시보드 메인으로">8년의 <span class="em">정부 광고</span>, 누가 주고 누가 받았나.</a></h1>
       <p class="headline-sub">정부 광고 154만 건, 8.4조 원 집행 내역 전수 분석.</p>
     </div>
     <div class="site-actions">
