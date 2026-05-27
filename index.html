@@ -833,7 +833,7 @@ function updatePreviewBanner() {
   }
   if (left > 0) {
     banner.classList.remove('exhausted');
-    banner.innerHTML = `🔓 무료 미리보기 <strong>${left}건</strong> 남음 · 광고주·매체 상세 페이지 진입 기준 (현재 ${seenCount}/${FREE_PREVIEW_LIMIT}) · 무제한 이용은 <a href="#" class="banner-login">로그인</a>.`;
+    banner.innerHTML = `🔓 슬로우뉴스 후원회원 전용 서비스입니다. <strong>${FREE_PREVIEW_LIMIT}건 이상 조회</strong>하려면 <a href="#" class="banner-login">로그인</a>을 해야합니다. (${seenCount}/${FREE_PREVIEW_LIMIT})`;
   } else {
     banner.classList.add('exhausted');
     banner.innerHTML = `🔒 무료 미리보기 ${FREE_PREVIEW_LIMIT}건 모두 사용 · 새로운 광고주·매체를 보려면 <a href="#" class="banner-login">로그인</a> · 이미 본 항목은 계속 열람 가능.`;
