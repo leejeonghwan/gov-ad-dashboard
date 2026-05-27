@@ -293,20 +293,16 @@
   }
   .placeholder-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 
-  /* ============ PREVIEW BANNER (푸터 바로 위, 블루 계열) ============ */
+  /* ============ PREVIEW BANNER (container 안 마지막, 블루 계열) ============ */
   .preview-banner {
     background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
     border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
     border-radius: 8px;
     color: var(--text); font-size: 13px;
     padding: 14px 20px; text-align: left;
-    max-width: 1400px; margin: 40px auto 24px;
+    margin: 40px 0 24px;
     line-height: 1.6;
-    /* 헤더/푸터의 좌우 padding(48px)에 맞춘 외부 여백 */
     box-sizing: border-box;
-  }
-  @media (min-width: 901px) {
-    .preview-banner { margin-left: 48px; margin-right: 48px; max-width: calc(1400px - 96px); }
   }
   .preview-banner strong { color: var(--accent); font-weight: 700; }
   .preview-banner.exhausted {
@@ -519,7 +515,7 @@
     </a>
     <div class="brand">
       <div class="site-title">정부광고 데이터 대시보드.</div>
-      <h1 class="headline"><a href="/adserver/" class="headline-link" title="대시보드 메인으로">8년의 <span class="em">정부 광고</span>, 누가 주고 누가 받았나.</a></h1>
+      <h1 class="headline"><a href="/adserver/" class="headline-link" title="대시보드 메인으로">8조 원 <span class="em">정부 광고</span>, 누가 주고 누가 받았나.</a></h1>
       <p class="headline-sub">정부 광고 154만 건, 8.4조 원 집행 내역 전수 분석.</p>
     </div>
     <div class="site-actions">
@@ -832,8 +828,8 @@ function updatePreviewBanner() {
     banner = document.createElement('div');
     banner.id = 'preview-banner';
     banner.className = 'preview-banner';
-    // 푸터 바로 위에 배치 — body 직속, 모든 탭에서 동일하게 표시
-    document.querySelector('footer').insertAdjacentElement('beforebegin', banner);
+    // container 마지막 자식 — panel 다음, footer 직전. container의 padding 안에서 자동 정렬.
+    document.querySelector('.container').appendChild(banner);
   }
   if (left > 0) {
     banner.classList.remove('exhausted');
