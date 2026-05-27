@@ -341,6 +341,7 @@
     display: flex; justify-content: center; align-items: flex-start;
     padding: 60px 24px 80px;
   }
+  .login-gate.inline { padding: 40px 0; }
   .login-card {
     background: var(--bg-elev); border: 1px solid var(--border);
     border-radius: 12px; padding: 36px 32px;
@@ -629,70 +630,24 @@
 
   <!-- ===== AGENCY TAB ===== -->
   <section class="panel" id="panel-agency">
-    <!-- 로그인 게이트 (인증 안 됨 시) -->
-    <div class="login-gate" id="login-gate-agency">
-      <div class="login-card">
-        <h2 class="login-title">광고주별 분석.</h2>
-        <p class="login-sub">슬로우뉴스 후원회원 전용 서비스입니다. 후원회원은 보내드린 계정으로 접속하시면 됩니다.</p>
-        <form class="login-form">
-          <input type="text" name="username" placeholder="아이디" autocomplete="username" required />
-          <input type="password" name="password" placeholder="비밀번호" autocomplete="current-password" required />
-          <button type="submit" class="login-submit">로그인.</button>
-          <div class="login-error" style="display:none">아이디 또는 비밀번호가 틀립니다.</div>
-        </form>
-        <div class="login-foot">접근 권한 문의는 운영자에게 연락 주세요.</div>
-      </div>
+    <h2 class="section-title">광고주(기관) 검색.</h2>
+    <div class="search-box">
+      <input type="text" class="search-input" id="search-agency"
+        placeholder="기관명을 검색하세요 (예: 보건복지부, 서울특별시청, 한국전력공사)" autocomplete="off">
+      <div class="suggestions" id="suggestions-agency"></div>
     </div>
-    <!-- 보호된 컨텐츠 (인증 후 표시) -->
-    <div class="protected-content" id="protected-agency" style="display:none">
-      <h2 class="section-title">광고주(기관) 검색.</h2>
-      <div class="search-box">
-        <input type="text" class="search-input" id="search-agency"
-          placeholder="기관명을 검색하세요 (예: 보건복지부, 서울특별시청, 한국전력공사)" autocomplete="off">
-        <div class="suggestions" id="suggestions-agency"></div>
-      </div>
-      <div id="detail-agency">
-        <div class="placeholder">
-          <div class="placeholder-icon">🔍</div>
-          <div>위 검색창에서 광고주를 선택하면.</div>
-          <div>해당 기관이 어느 매체에 얼마나 집행했는지 분석합니다.</div>
-        </div>
-      </div>
-    </div>
+    <div id="detail-agency"></div>
   </section>
 
   <!-- ===== MEDIA TAB ===== -->
   <section class="panel" id="panel-media">
-    <!-- 로그인 게이트 -->
-    <div class="login-gate" id="login-gate-media">
-      <div class="login-card">
-        <h2 class="login-title">매체별 분석.</h2>
-        <p class="login-sub">로그인 후 매체별 수주 데이터와 세부 광고 내역을 볼 수 있습니다.</p>
-        <form class="login-form">
-          <input type="text" name="username" placeholder="아이디" autocomplete="username" required />
-          <input type="password" name="password" placeholder="비밀번호" autocomplete="current-password" required />
-          <button type="submit" class="login-submit">로그인.</button>
-          <div class="login-error" style="display:none">아이디 또는 비밀번호가 틀립니다.</div>
-        </form>
-        <div class="login-foot">접근 권한 문의는 운영자에게 연락 주세요.</div>
-      </div>
+    <h2 class="section-title">매체 검색.</h2>
+    <div class="search-box">
+      <input type="text" class="search-input" id="search-media"
+        placeholder="매체명을 검색하세요 (예: 조선일보, KBS, 네이버)" autocomplete="off">
+      <div class="suggestions" id="suggestions-media"></div>
     </div>
-    <!-- 보호된 컨텐츠 -->
-    <div class="protected-content" id="protected-media" style="display:none">
-      <h2 class="section-title">매체 검색.</h2>
-      <div class="search-box">
-        <input type="text" class="search-input" id="search-media"
-          placeholder="매체명을 검색하세요 (예: 조선일보, KBS, 네이버)" autocomplete="off">
-        <div class="suggestions" id="suggestions-media"></div>
-      </div>
-      <div id="detail-media">
-        <div class="placeholder">
-          <div class="placeholder-icon">🔍</div>
-          <div>위 검색창에서 매체를 선택하면.</div>
-          <div>해당 매체가 어느 기관에서 얼마나 수주했는지 분석합니다.</div>
-        </div>
-      </div>
-    </div>
+    <div id="detail-media"></div>
   </section>
 
 </div>
@@ -803,18 +758,64 @@ function logout() {
 function updateGateUI() {
   const authed = !!getAuth();
   STATE.authed = authed;
-  const previewActive = freeViewsLeft() > 0 || getSeen().size > 0;
-  // 인증 OR 미리보기 (남았거나 사용 중) → 컨텐츠 보여줌 (entity별 게이트는 navigate 시점에 결정)
-  const showContent = authed || previewActive;
+  // detail 영역에 placeholder 또는 로그인 카드 표시
+  // (이미 detail content가 있으면 — 사용자가 검색한 entity가 표시 중이면 — 그대로 둠)
+  const needLogin = !authed && freeViewsLeft() === 0;
   ['agency', 'media'].forEach(k => {
-    const gate = document.getElementById(`login-gate-${k}`);
-    const content = document.getElementById(`protected-${k}`);
-    if (gate) gate.style.display = showContent ? 'none' : '';
-    if (content) content.style.display = showContent ? '' : 'none';
+    const detail = document.getElementById(`detail-${k}`);
+    if (!detail) return;
+    // detail-header가 있으면 = 실제 entity detail 표시 중 → 건드리지 않음
+    if (detail.querySelector('.detail-header')) return;
+    setDetailPlaceholder(k, needLogin ? 'login' : 'default');
   });
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) logoutBtn.style.display = authed ? '' : 'none';
   updatePreviewBanner();
+}
+
+// detail 영역 내용 토글: 기본 안내 placeholder 또는 로그인 카드
+function setDetailPlaceholder(kind, mode) {
+  const detail = document.getElementById(`detail-${kind}`);
+  if (!detail) return;
+  if (mode === 'login') {
+    detail.innerHTML = buildLoginCardHTML(kind);
+    const form = detail.querySelector('.login-form');
+    if (form) bindLoginForm(form);
+  } else {
+    detail.innerHTML = buildDefaultPlaceholderHTML(kind);
+  }
+}
+
+function buildDefaultPlaceholderHTML(kind) {
+  const lines = kind === 'agency'
+    ? ['위 검색창에서 광고주를 선택하면.', '해당 기관이 어느 매체에 얼마나 집행했는지 분석합니다.']
+    : ['위 검색창에서 매체를 선택하면.', '해당 매체가 어느 기관에서 얼마나 수주했는지 분석합니다.'];
+  return `
+    <div class="placeholder">
+      <div class="placeholder-icon">🔍</div>
+      <div>${escapeHTML(lines[0])}</div>
+      <div>${escapeHTML(lines[1])}</div>
+    </div>
+  `;
+}
+
+function buildLoginCardHTML(kind) {
+  const title = kind === 'agency' ? '광고주별 분석.' : '매체별 분석.';
+  return `
+    <div class="login-gate inline">
+      <div class="login-card">
+        <h2 class="login-title">${title}</h2>
+        <p class="login-sub">슬로우뉴스 후원회원 전용 서비스입니다. 후원회원은 보내드린 계정으로 접속하시면 됩니다.</p>
+        <form class="login-form">
+          <input type="text" name="username" placeholder="아이디" autocomplete="username" required />
+          <input type="password" name="password" placeholder="비밀번호" autocomplete="current-password" required />
+          <button type="submit" class="login-submit">로그인.</button>
+          <div class="login-error" style="display:none">아이디 또는 비밀번호가 틀립니다.</div>
+        </form>
+        <div class="login-foot">접근 권한 문의는 운영자에게 연락 주세요.</div>
+      </div>
+    </div>
+  `;
 }
 
 // ===== 무료 미리보기 배너 (헤더 아래) =====
@@ -843,42 +844,40 @@ function updatePreviewBanner() {
   }
   banner.querySelector('.banner-login')?.addEventListener('click', e => {
     e.preventDefault();
-    // 어느 탭이든 로그인 폼 표시: agency 탭 + 게이트 강제 표시
-    document.querySelector('.tab[data-tab="agency"]').click();
-    const gate = document.getElementById('login-gate-agency');
-    const content = document.getElementById('protected-agency');
-    if (gate) gate.style.display = '';
-    if (content) content.style.display = 'none';
-    setTimeout(() => gate?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    // agency 탭으로 + detail 영역에 로그인 카드 강제 표시
+    activateTab('agency');
+    setDetailPlaceholder('agency', 'login');
+    setTimeout(() => document.getElementById('detail-agency')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   });
 }
 
-function setupLoginForms() {
-  document.querySelectorAll('.login-form').forEach(form => {
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const user = form.username.value.trim();
-      const pass = form.password.value;
-      const errEl = form.querySelector('.login-error');
-      const btn = form.querySelector('.login-submit');
-      const origText = btn.textContent;
-      errEl.style.display = 'none';
-      btn.disabled = true;
-      btn.textContent = '확인 중…';
-      const ok = await tryLogin(user, pass);
-      btn.disabled = false;
-      btn.textContent = origText;
-      if (ok) {
-        // 모든 form 입력 초기화
-        document.querySelectorAll('.login-form').forEach(f => f.reset());
-        updateGateUI();
-      } else {
-        errEl.style.display = '';
-        form.password.focus();
-        form.password.select();
-      }
-    });
+function bindLoginForm(form) {
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const user = form.username.value.trim();
+    const pass = form.password.value;
+    const errEl = form.querySelector('.login-error');
+    const btn = form.querySelector('.login-submit');
+    const origText = btn.textContent;
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = '확인 중…';
+    const ok = await tryLogin(user, pass);
+    btn.disabled = false;
+    btn.textContent = origText;
+    if (ok) {
+      document.querySelectorAll('.login-form').forEach(f => f.reset());
+      updateGateUI();
+    } else {
+      errEl.style.display = '';
+      form.password.focus();
+      form.password.select();
+    }
   });
+}
+function setupLoginForms() {
+  // 정적 폼 (없을 수도 있음, 동적 주입이 기본)
+  document.querySelectorAll('.login-form').forEach(bindLoginForm);
   const lb = document.getElementById('logout-btn');
   if (lb) lb.addEventListener('click', logout);
 }
@@ -2014,9 +2013,11 @@ function bindRawTable(card, raw, cols, yearSet) {
 
 // ============ 광고주 상세 ============
 function renderAgencyDetail(entry) {
-  // 무료 미리보기 카운트 확인
+  // 무료 미리보기 카운트 확인 → 한도면 detail 영역에 로그인 카드 표시
   if (!canViewEntity('agency', entry.idx)) {
-    showPreviewGateFor('agency');
+    setDetailPlaceholder('agency', 'login');
+    activateTab('agency');
+    setTimeout(() => document.getElementById('detail-agency')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     return;
   }
   markEntityViewed('agency', entry.idx);
@@ -2156,23 +2157,15 @@ function renderAgencyContent() {
 // ============ 매체 상세 ============
 function renderMediaDetail(entry) {
   if (!canViewEntity('media', entry.idx)) {
-    showPreviewGateFor('media');
+    setDetailPlaceholder('media', 'login');
+    activateTab('media');
+    setTimeout(() => document.getElementById('detail-media')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     return;
   }
   markEntityViewed('media', entry.idx);
   STATE.selectedMedia = entry;
   STATE.detailYearsMedia = new Set(STATE.agg.years);
   renderMediaContent();
-}
-
-// 미리보기 한도 초과 시 해당 탭의 게이트 표시
-function showPreviewGateFor(kind) {
-  activateTab(kind);
-  const gate = document.getElementById(`login-gate-${kind}`);
-  const content = document.getElementById(`protected-${kind}`);
-  if (gate) gate.style.display = '';
-  if (content) content.style.display = 'none';
-  setTimeout(() => gate?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
 }
 
 function renderMediaContent() {
