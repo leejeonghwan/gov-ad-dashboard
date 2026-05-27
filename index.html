@@ -293,6 +293,23 @@
   }
   .placeholder-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 
+  /* ============ PREVIEW BANNER ============ */
+  .preview-banner {
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
+    border-bottom: 1px solid var(--border);
+    color: var(--text); font-size: 13px;
+    padding: 10px 24px; text-align: center;
+  }
+  .preview-banner strong { color: var(--accent); font-weight: 700; }
+  .preview-banner.exhausted {
+    background: color-mix(in srgb, var(--red) 10%, var(--bg-elev));
+  }
+  .preview-banner .banner-login {
+    color: var(--accent); font-weight: 600; text-decoration: underline;
+    cursor: pointer;
+  }
+  .preview-banner .banner-login:hover { opacity: 0.8; }
+
   /* ============ DATA LOADING PILL ============ */
   .data-pill {
     position: fixed; bottom: 20px; right: 20px;
@@ -607,7 +624,7 @@
     <div class="login-gate" id="login-gate-agency">
       <div class="login-card">
         <h2 class="login-title">광고주별 분석.</h2>
-        <p class="login-sub">로그인 후 광고주별 집행 데이터와 세부 광고 내역을 볼 수 있습니다.</p>
+        <p class="login-sub">무료 미리보기 3건을 모두 사용했거나 새 항목을 보려면 로그인이 필요합니다. 이미 본 항목은 로그인 없이 계속 열람 가능.</p>
         <form class="login-form">
           <input type="text" name="username" placeholder="아이디" autocomplete="username" required />
           <input type="password" name="password" placeholder="비밀번호" autocomplete="current-password" required />
@@ -702,8 +719,10 @@ const STATE = {
   regimeMonthly: null,  // {그룹명: {"YYYY-MM": amount}} (공개)
 };
 
-// ============ 인증 관리 ============
+// ============ 인증 관리 + 무료 미리보기 카운터 ============
 const AUTH_KEY = 'adserver-auth';
+const SEEN_KEY = 'adserver-seen';        // localStorage: 본 entity 집합 (해제 전 유지)
+const FREE_PREVIEW_LIMIT = 3;
 
 function getAuth() {
   try { return sessionStorage.getItem(AUTH_KEY); } catch (_) { return null; }
@@ -716,6 +735,34 @@ function setAuth(v) {
   STATE.authed = !!v;
 }
 
+function getSeen() {
+  try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); }
+  catch (_) { return new Set(); }
+}
+function addSeen(key) {
+  const seen = getSeen();
+  seen.add(key);
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen])); } catch (_) {}
+}
+function freeViewsLeft() {
+  return Math.max(0, FREE_PREVIEW_LIMIT - getSeen().size);
+}
+
+// 진입 가능 여부 (인증 OR 미리보기 남음 OR 이미 본 entity)
+function canViewEntity(kind, idx) {
+  if (getAuth()) return true;
+  const key = `${kind}-${idx}`;
+  const seen = getSeen();
+  if (seen.has(key)) return true;
+  return seen.size < FREE_PREVIEW_LIMIT;
+}
+// 카운트 증가 (이미 본 entity면 무시)
+function markEntityViewed(kind, idx) {
+  if (getAuth()) return;
+  addSeen(`${kind}-${idx}`);
+  updatePreviewBanner();
+}
+
 function authFetch(url, opts = {}) {
   const auth = getAuth();
   const headers = { ...(opts.headers || {}) };
@@ -724,10 +771,10 @@ function authFetch(url, opts = {}) {
 }
 
 async function tryLogin(user, pass) {
+  // 인증 검증용 별도 endpoint (Nginx에 auth_basic 적용된 곳)
   const auth = 'Basic ' + btoa(unescape(encodeURIComponent(user + ':' + pass)));
   try {
-    // 검증용: 가장 작은 보호 endpoint 호출
-    const res = await fetch('data/agency/0.json', {
+    const res = await fetch('check-auth', {
       headers: { 'Authorization': auth },
       cache: 'no-store',
     });
@@ -738,9 +785,7 @@ async function tryLogin(user, pass) {
 
 function logout() {
   setAuth(null);
-  // 캐시 비우기 (다른 사람이 같은 브라우저 쓸 수도)
   STATE.rawCache.clear();
-  // 선택된 entity 해제
   STATE.selectedAgency = null;
   STATE.selectedMedia = null;
   updateGateUI();
@@ -749,14 +794,53 @@ function logout() {
 function updateGateUI() {
   const authed = !!getAuth();
   STATE.authed = authed;
+  const previewActive = freeViewsLeft() > 0 || getSeen().size > 0;
+  // 인증 OR 미리보기 (남았거나 사용 중) → 컨텐츠 보여줌 (entity별 게이트는 navigate 시점에 결정)
+  const showContent = authed || previewActive;
   ['agency', 'media'].forEach(k => {
     const gate = document.getElementById(`login-gate-${k}`);
     const content = document.getElementById(`protected-${k}`);
-    if (gate) gate.style.display = authed ? 'none' : '';
-    if (content) content.style.display = authed ? '' : 'none';
+    if (gate) gate.style.display = showContent ? 'none' : '';
+    if (content) content.style.display = showContent ? '' : 'none';
   });
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) logoutBtn.style.display = authed ? '' : 'none';
+  updatePreviewBanner();
+}
+
+// ===== 무료 미리보기 배너 (헤더 아래) =====
+function updatePreviewBanner() {
+  let banner = document.getElementById('preview-banner');
+  const authed = !!getAuth();
+  if (authed) {
+    if (banner) banner.remove();
+    return;
+  }
+  const seenCount = getSeen().size;
+  const left = freeViewsLeft();
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'preview-banner';
+    banner.className = 'preview-banner';
+    document.querySelector('header.site').insertAdjacentElement('afterend', banner);
+  }
+  if (left > 0) {
+    banner.classList.remove('exhausted');
+    banner.innerHTML = `🔓 무료 미리보기 <strong>${left}건</strong> 남음 · 광고주·매체 상세 페이지 진입 기준 (현재 ${seenCount}/${FREE_PREVIEW_LIMIT}) · 무제한 이용은 <a href="#" class="banner-login">로그인</a>.`;
+  } else {
+    banner.classList.add('exhausted');
+    banner.innerHTML = `🔒 무료 미리보기 ${FREE_PREVIEW_LIMIT}건 모두 사용 · 새로운 광고주·매체를 보려면 <a href="#" class="banner-login">로그인</a> · 이미 본 항목은 계속 열람 가능.`;
+  }
+  banner.querySelector('.banner-login')?.addEventListener('click', e => {
+    e.preventDefault();
+    // 어느 탭이든 로그인 폼 표시: agency 탭 + 게이트 강제 표시
+    document.querySelector('.tab[data-tab="agency"]').click();
+    const gate = document.getElementById('login-gate-agency');
+    const content = document.getElementById('protected-agency');
+    if (gate) gate.style.display = '';
+    if (content) content.style.display = 'none';
+    setTimeout(() => gate?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+  });
 }
 
 function setupLoginForms() {
@@ -1920,8 +2004,14 @@ function bindRawTable(card, raw, cols, yearSet) {
 
 // ============ 광고주 상세 ============
 function renderAgencyDetail(entry) {
+  // 무료 미리보기 카운트 확인
+  if (!canViewEntity('agency', entry.idx)) {
+    showPreviewGateFor('agency');
+    return;
+  }
+  markEntityViewed('agency', entry.idx);
   STATE.selectedAgency = entry;
-  STATE.detailYearsAgency = new Set(STATE.agg.years);  // entry 바뀔 때마다 초기화
+  STATE.detailYearsAgency = new Set(STATE.agg.years);
   renderAgencyContent();
 }
 
@@ -2055,9 +2145,24 @@ function renderAgencyContent() {
 
 // ============ 매체 상세 ============
 function renderMediaDetail(entry) {
+  if (!canViewEntity('media', entry.idx)) {
+    showPreviewGateFor('media');
+    return;
+  }
+  markEntityViewed('media', entry.idx);
   STATE.selectedMedia = entry;
   STATE.detailYearsMedia = new Set(STATE.agg.years);
   renderMediaContent();
+}
+
+// 미리보기 한도 초과 시 해당 탭의 게이트 표시
+function showPreviewGateFor(kind) {
+  activateTab(kind);
+  const gate = document.getElementById(`login-gate-${kind}`);
+  const content = document.getElementById(`protected-${kind}`);
+  if (gate) gate.style.display = '';
+  if (content) content.style.display = 'none';
+  setTimeout(() => gate?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
 }
 
 function renderMediaContent() {
