@@ -293,16 +293,20 @@
   }
   .placeholder-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 
-  /* ============ PREVIEW BANNER ============ */
+  /* ============ PREVIEW BANNER (본문 하단, 블루 계열) ============ */
   .preview-banner {
-    background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
-    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+    border-radius: 8px;
     color: var(--text); font-size: 13px;
-    padding: 10px 24px; text-align: center;
+    padding: 14px 20px; text-align: left;
+    margin: 40px 0 24px;
+    line-height: 1.6;
   }
   .preview-banner strong { color: var(--accent); font-weight: 700; }
   .preview-banner.exhausted {
-    background: color-mix(in srgb, var(--red) 10%, var(--bg-elev));
+    background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   }
   .preview-banner .banner-login {
     color: var(--accent); font-weight: 600; text-decoration: underline;
@@ -822,7 +826,8 @@ function updatePreviewBanner() {
     banner = document.createElement('div');
     banner.id = 'preview-banner';
     banner.className = 'preview-banner';
-    document.querySelector('header.site').insertAdjacentElement('afterend', banner);
+    // 본문 하단(.container 마지막)에 배치 — footer 직전, 모든 탭에서 동일하게 표시
+    document.querySelector('.container').appendChild(banner);
   }
   if (left > 0) {
     banner.classList.remove('exhausted');
