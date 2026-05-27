@@ -293,6 +293,23 @@
   }
   .placeholder-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 
+  /* ============ DATA LOADING PILL ============ */
+  .data-pill {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    color: var(--text-muted); padding: 8px 14px; border-radius: 20px;
+    font-size: 12px; z-index: 50;
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 4px 16px var(--shadow);
+  }
+  .pill-spinner {
+    width: 12px; height: 12px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .data-pill.error { color: var(--red); border-color: var(--red); }
+  .data-pill.error .pill-spinner { display: none; }
+
   /* ============ LOGIN GATE ============ */
   .login-gate {
     display: flex; justify-content: center; align-items: flex-start;
@@ -883,24 +900,88 @@ function fmtBillion(n) {
   return Math.round(n / 1e8).toLocaleString('ko-KR');
 }
 
-// ============ 데이터 로드 ============
-async function loadData() {
-  const [ovRes, agRes] = await Promise.all([
-    fetch('data/overview.json'),
-    fetch('data/aggregate.json'),
-  ]);
-  STATE.overview = await ovRes.json();
-  STATE.agg = await agRes.json();
+// ============ 데이터 로드 (lazy) ============
+async function loadOverview() {
+  const res = await fetch('data/overview.json');
+  if (!res.ok) throw new Error(`overview HTTP ${res.status}`);
+  STATE.overview = await res.json();
 
-  // 필터 기본값: 전체 선택 (단 진행 중 연도 2026은 데이터가 3월까지뿐이라 기본 제외)
-  STATE.agg.years.forEach(y => {
-    if (y !== 2026) STATE.filters.years.add(y);
+  // overview에서 차원(연도/매체구분/기관분류) 추출 → agg skeleton 만들기
+  const ov = STATE.overview;
+  const years = ov.yearly.map(r => r.연도).sort((a, b) => a - b);
+  const agency_types = [...new Set(ov.agency_type_year.map(r => r.기관분류))].sort();
+  const media_types = [...new Set(ov.media_type_year.map(r => r.매체구분))].sort();
+  STATE.agg = {
+    years, agency_types, media_types,
+    agencies: [], media: [], rows: [],  // 빈 배열 (aggregate 로드 전)
+  };
+
+  // 필터 기본값: 전체 선택 (2026은 부분 데이터라 제외)
+  years.forEach(y => { if (y !== 2026) STATE.filters.years.add(y); });
+  media_types.forEach(m => STATE.filters.mtypes.add(m));
+  agency_types.forEach(a => STATE.filters.atypes.add(a));
+}
+
+async function loadAggregateBackground() {
+  showDataPill('전체 데이터 로딩 중…');
+  try {
+    const res = await fetch('data/aggregate.json');
+    if (!res.ok) throw new Error(`aggregate HTTP ${res.status}`);
+    const data = await res.json();
+    STATE.agg.agencies = data.agencies;
+    STATE.agg.media = data.media;
+    STATE.agg.rows = data.rows;
+    computeEntityTotals();
+
+    // 검색창 활성화 (이제 후보 데이터 있음)
+    setupSearch('search-agency', 'suggestions-agency', STATE.agencyTotals, renderAgencyDetail);
+    setupSearch('search-media', 'suggestions-media', STATE.mediaTotals, renderMediaDetail);
+    enableSearchInputs();
+
+    // 현재 active 탭에 맞춰 차트 다시 그림 (정확한 필터 + Top 50)
+    const tab = document.querySelector('.tab.active')?.dataset.tab;
+    if (tab === 'market') renderMarket();
+    else if (tab === 'agency' && STATE.selectedAgency) renderAgencyContent();
+    else if (tab === 'media' && STATE.selectedMedia) renderMediaContent();
+
+    hideDataPill();
+  } catch (e) {
+    console.error('aggregate load failed', e);
+    showDataPill(`데이터 로드 실패: ${e.message}`, true);
+  }
+}
+
+function showDataPill(text, isError = false) {
+  let pill = document.getElementById('data-pill');
+  if (!pill) {
+    pill = document.createElement('div');
+    pill.id = 'data-pill';
+    pill.className = 'data-pill';
+    document.body.appendChild(pill);
+  }
+  pill.className = 'data-pill' + (isError ? ' error' : '');
+  pill.innerHTML = `<span class="pill-spinner"></span><span>${escapeHTML(text)}</span>`;
+}
+function hideDataPill() {
+  document.getElementById('data-pill')?.remove();
+}
+
+function disableSearchInputs() {
+  ['search-agency', 'search-media'].forEach(id => {
+    const i = document.getElementById(id);
+    if (!i) return;
+    i.dataset.origPlaceholder = i.placeholder;
+    i.placeholder = '데이터 로딩 중…';
+    i.disabled = true;
   });
-  STATE.agg.media_types.forEach(m => STATE.filters.mtypes.add(m));
-  STATE.agg.agency_types.forEach(a => STATE.filters.atypes.add(a));
-
-  // 전체 합계 사전 계산 (검색용 정렬)
-  computeEntityTotals();
+}
+function enableSearchInputs() {
+  ['search-agency', 'search-media'].forEach(id => {
+    const i = document.getElementById(id);
+    if (!i) return;
+    if (i.dataset.origPlaceholder) i.placeholder = i.dataset.origPlaceholder;
+    i.disabled = false;
+  });
 }
 
 function computeEntityTotals() {
@@ -999,41 +1080,65 @@ function getChart(id) {
 }
 // TOOLTIP / AXIS_STYLE / ECHARTS_BASE / PIE_TOOLTIP은 rebuildEchartsStyles()에서 동적으로 정의 (테마 따라 변경)
 
-// ============ MARKET 렌더 ============
+// ============ MARKET 렌더 (basic / full 모드 자동 분기) ============
 function renderMarket() {
   const ag = STATE.agg;
+  const ov = STATE.overview;
+  const hasFull = ag.rows.length > 0;
 
   // 집계
   const yearlySum = new Map();   // year -> amount
   const mtypeYear = new Map();   // mtype -> Map(year -> amount)
   const atypeYear = new Map();   // atype -> Map(year -> amount)
-  const agencyAgg = new Map();   // aIdx -> amount
-  const mediaAgg = new Map();    // mIdx -> amount
+  const agencyAgg = new Map();   // aIdx (full) / name (basic) -> amount
+  const mediaAgg = new Map();    // mIdx (full) / name (basic) -> amount
   const mtypeTotal = new Map();  // mtype -> amount
 
-  for (const r of iterFiltered()) {
-    const year = ag.years[r[0]];
-    const at = ag.agency_types[r[1]];
-    const aIdx = r[2];
-    const mt = ag.media_types[r[3]];
-    const mIdx = r[4];
-    const amt = r[5];
+  const yearSet = STATE.filters.years.size > 0 ? STATE.filters.years : new Set(ag.years);
+  const mtypeSet = STATE.filters.mtypes.size > 0 ? STATE.filters.mtypes : new Set(ag.media_types);
+  const atypeSet = STATE.filters.atypes.size > 0 ? STATE.filters.atypes : new Set(ag.agency_types);
 
-    yearlySum.set(year, (yearlySum.get(year) || 0) + amt);
-
-    if (!mtypeYear.has(mt)) mtypeYear.set(mt, new Map());
-    mtypeYear.get(mt).set(year, (mtypeYear.get(mt).get(year) || 0) + amt);
-
-    if (!atypeYear.has(at)) atypeYear.set(at, new Map());
-    atypeYear.get(at).set(year, (atypeYear.get(at).get(year) || 0) + amt);
-
-    agencyAgg.set(aIdx, (agencyAgg.get(aIdx) || 0) + amt);
-    mediaAgg.set(mIdx, (mediaAgg.get(mIdx) || 0) + amt);
-    mtypeTotal.set(mt, (mtypeTotal.get(mt) || 0) + amt);
+  if (hasFull) {
+    for (const r of iterFiltered()) {
+      const year = ag.years[r[0]];
+      const at = ag.agency_types[r[1]];
+      const aIdx = r[2];
+      const mt = ag.media_types[r[3]];
+      const mIdx = r[4];
+      const amt = r[5];
+      yearlySum.set(year, (yearlySum.get(year) || 0) + amt);
+      if (!mtypeYear.has(mt)) mtypeYear.set(mt, new Map());
+      mtypeYear.get(mt).set(year, (mtypeYear.get(mt).get(year) || 0) + amt);
+      if (!atypeYear.has(at)) atypeYear.set(at, new Map());
+      atypeYear.get(at).set(year, (atypeYear.get(at).get(year) || 0) + amt);
+      agencyAgg.set(aIdx, (agencyAgg.get(aIdx) || 0) + amt);
+      mediaAgg.set(mIdx, (mediaAgg.get(mIdx) || 0) + amt);
+      mtypeTotal.set(mt, (mtypeTotal.get(mt) || 0) + amt);
+    }
+  } else {
+    // === basic mode: overview의 사전 집계만 사용 ===
+    // 주의: yearly에는 매체구분/기관분류 분해가 없어 두 필터는 차트 1번에 적용 안 됨.
+    // 정확한 필터 결과는 aggregate 로드 후 자동 갱신됨.
+    ov.yearly.forEach(r => {
+      if (yearSet.has(r.연도)) yearlySum.set(r.연도, r.총액);
+    });
+    ov.media_type_year.forEach(r => {
+      if (!yearSet.has(r.연도) || !mtypeSet.has(r.매체구분)) return;
+      if (!mtypeYear.has(r.매체구분)) mtypeYear.set(r.매체구분, new Map());
+      mtypeYear.get(r.매체구분).set(r.연도, r.총액);
+      mtypeTotal.set(r.매체구분, (mtypeTotal.get(r.매체구분) || 0) + r.총액);
+    });
+    ov.agency_type_year.forEach(r => {
+      if (!yearSet.has(r.연도) || !atypeSet.has(r.기관분류)) return;
+      if (!atypeYear.has(r.기관분류)) atypeYear.set(r.기관분류, new Map());
+      atypeYear.get(r.기관분류).set(r.연도, r.총액);
+    });
+    // Top 30 (overview 사전 계산 — 필터 적용 안 됨, 전체 기준)
+    ov.top_agencies.forEach(r => agencyAgg.set(r.기관명, r.총액));
+    ov.top_media.forEach(r => mediaAgg.set(r.매체명, r.총액));
   }
 
-  const sortedYears = [...(STATE.filters.years.size > 0 ? STATE.filters.years : new Set(ag.years))]
-    .sort((a, b) => a - b);
+  const sortedYears = [...yearSet].sort((a, b) => a - b);
 
   // 1. 연도별 라인
   getChart('chart-yearly').setOption({
@@ -2085,23 +2190,25 @@ function renderMediaContent() {
 // ============ INIT ============
 (async function init() {
   try {
-    await loadData();
-    // 차트 init 전에 app을 보이게 해야 컨테이너 width가 잡힘
+    // Stage 1: overview (12KB, 즉시) — 메인 페이지 표시까지
+    await loadOverview();
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     initTheme();
     renderKPI();
     renderFilters();
     setupTabs();
-    setupSearch('search-agency', 'suggestions-agency', STATE.agencyTotals, renderAgencyDetail);
-    setupSearch('search-media', 'suggestions-media', STATE.mediaTotals, renderMediaDetail);
     setupLoginForms();
     updateGateUI();
-    // layout flush 후 차트 그리기
+    // search input은 일단 비활성 (aggregate 로드 후 활성)
+    disableSearchInputs();
+    // 메인 차트 (basic 모드, overview 기반)
     await new Promise(r => requestAnimationFrame(r));
     renderMarket();
-    // 안전망: 모든 차트 한 번 더 resize
     setTimeout(() => Object.values(STATE.charts).forEach(c => c.resize()), 50);
+
+    // Stage 2: aggregate (17MB, 백그라운드) — 검색·필터 정확도 보강
+    loadAggregateBackground();
   } catch (e) {
     const isFileProto = location.protocol === 'file:' || location.protocol === 'blob:';
     const hint = isFileProto
