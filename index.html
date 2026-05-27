@@ -293,10 +293,10 @@
   }
   .placeholder-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 
-  /* ============ PREVIEW BANNER (container 안 마지막, 블루 계열) ============ */
+  /* ============ PREVIEW BANNER (container 안 마지막, 파란 보더만) ============ */
   .preview-banner {
-    background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
-    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+    background: var(--bg-elev);
+    border: 1px solid var(--accent);
     border-radius: 8px;
     color: var(--text); font-size: 13px;
     padding: 14px 20px; text-align: left;
@@ -306,8 +306,8 @@
   }
   .preview-banner strong { color: var(--accent); font-weight: 700; }
   .preview-banner.exhausted {
-    background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
-    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    background: var(--bg-elev);
+    border-color: var(--accent);
   }
   .preview-banner .banner-login {
     color: var(--accent); font-weight: 600; text-decoration: underline;
