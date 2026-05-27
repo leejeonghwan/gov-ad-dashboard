@@ -1183,18 +1183,19 @@ function renderMarket() {
   // 4. 기관분류 누적
   renderStackedBar('chart-atype-stack', atypeYear, sortedYears);
 
-  // 5. 상위 50 광고주 (단위: 억 원)
+  // 5. 상위 50 광고주 (basic: overview Top 30 / full: aggregate Top 50 + linkTo)
   const topAg = [...agencyAgg.entries()]
     .sort((a, b) => b[1] - a[1]).slice(0, 50)
-    .map(([idx, v]) => ({ name: ag.agencies[idx], value: v })).reverse();
-  renderHBar('chart-top-agencies', topAg, '#58a6ff', { unit: 'billion', linkTo: 'agency' });
+    .map(([k, v]) => ({ name: hasFull ? ag.agencies[k] : k, value: v })).reverse();
+  renderHBar('chart-top-agencies', topAg, '#58a6ff',
+    { unit: 'billion', linkTo: hasFull ? 'agency' : null });
 
-  // 6. 상위 50 매체 (단위: 억 원)
+  // 6. 상위 50 매체
   const topMed = [...mediaAgg.entries()]
     .sort((a, b) => b[1] - a[1]).slice(0, 50)
-    .map(([idx, v]) => ({ name: ag.media[idx], value: v })).reverse();
-  renderHBar('chart-top-media', topMed, '#f78166', { unit: 'billion', linkTo: 'media' });
-
+    .map(([k, v]) => ({ name: hasFull ? ag.media[k] : k, value: v })).reverse();
+  renderHBar('chart-top-media', topMed, '#f78166',
+    { unit: 'billion', linkTo: hasFull ? 'media' : null });
 }
 
 function renderStackedBar(id, map, years) {
