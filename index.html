@@ -201,19 +201,30 @@
     border-bottom: 1px solid var(--border);
     padding: 0; background: var(--bg);
     position: sticky; top: 0; z-index: 10;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  nav.tabs::-webkit-scrollbar { display: none; }
   .tabs-inner {
     max-width: 1400px; margin: 0 auto; padding: 0 24px;
     display: flex; gap: 4px;
+    white-space: nowrap;
+    flex-wrap: nowrap;
   }
   .tab {
     background: none; border: none; padding: 14px 20px;
     color: var(--text-muted); font-size: 14px; font-weight: 600;
     cursor: pointer; border-bottom: 2px solid transparent;
     font-family: inherit; transition: color 0.15s, border-color 0.15s;
+    flex-shrink: 0;
   }
   .tab:hover { color: var(--text); }
   .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  @media (max-width: 700px) {
+    .tabs-inner { padding: 0 16px; gap: 2px; }
+    .tab { padding: 12px 12px; font-size: 13px; }
+  }
 
   /* ============ FILTERS ============ */
   .filters {
