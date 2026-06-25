@@ -773,6 +773,8 @@ const STATE = {
 };
 
 // ============ 인증 관리 + 무료 미리보기 카운터 ============
+// 게이트 전체 비활성화 (true) / 활성화하려면 false
+const GATING_DISABLED = true;
 const AUTH_KEY = 'adserver-auth';
 const SEEN_KEY = 'adserver-seen';        // localStorage: 본 entity 집합 (해제 전 유지)
 const FREE_PREVIEW_LIMIT = 3;
@@ -803,6 +805,7 @@ function freeViewsLeft() {
 
 // 진입 가능 여부 (인증 OR 미리보기 남음 OR 이미 본 entity)
 function canViewEntity(kind, idx) {
+  if (GATING_DISABLED) return true;
   if (getAuth()) return true;
   const key = `${kind}-${idx}`;
   const seen = getSeen();
@@ -811,6 +814,7 @@ function canViewEntity(kind, idx) {
 }
 // 카운트 증가 (이미 본 entity면 무시)
 function markEntityViewed(kind, idx) {
+  if (GATING_DISABLED) return;
   if (getAuth()) return;
   addSeen(`${kind}-${idx}`);
   updatePreviewBanner();
@@ -845,15 +849,24 @@ function logout() {
 }
 
 function updateGateUI() {
+  if (GATING_DISABLED) {
+    STATE.authed = true;  // 모든 진입 허용
+    ['agency', 'media'].forEach(k => {
+      const detail = document.getElementById(`detail-${k}`);
+      if (!detail) return;
+      if (detail.querySelector('.detail-header')) return;
+      setDetailPlaceholder(k, 'default');
+    });
+    document.getElementById('logout-btn').style.display = 'none';
+    document.getElementById('preview-banner')?.remove();
+    return;
+  }
   const authed = !!getAuth();
   STATE.authed = authed;
-  // detail 영역에 placeholder 또는 로그인 카드 표시
-  // (이미 detail content가 있으면 — 사용자가 검색한 entity가 표시 중이면 — 그대로 둠)
   const needLogin = !authed && freeViewsLeft() === 0;
   ['agency', 'media'].forEach(k => {
     const detail = document.getElementById(`detail-${k}`);
     if (!detail) return;
-    // detail-header가 있으면 = 실제 entity detail 표시 중 → 건드리지 않음
     if (detail.querySelector('.detail-header')) return;
     setDetailPlaceholder(k, needLogin ? 'login' : 'default');
   });
@@ -909,6 +922,10 @@ function buildLoginCardHTML(kind) {
 
 // ===== 무료 미리보기 배너 (헤더 아래) =====
 function updatePreviewBanner() {
+  if (GATING_DISABLED) {
+    document.getElementById('preview-banner')?.remove();
+    return;
+  }
   let banner = document.getElementById('preview-banner');
   const authed = !!getAuth();
   if (authed) {
