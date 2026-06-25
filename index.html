@@ -1126,9 +1126,9 @@ function fmtInt(n) {
   return n.toLocaleString('ko-KR');
 }
 function fmtBillion(n) {
-  // 원 → 억 단위 정수, 천 단위 콤마
+  // 원 → 억 단위, 소수점 1자리, 천 단위 콤마
   if (n == null || isNaN(n)) return '-';
-  return Math.round(n / 1e8).toLocaleString('ko-KR');
+  return (n / 1e8).toLocaleString('ko-KR', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
 }
 
 // ============ 데이터 로드 (lazy) ============
@@ -1782,7 +1782,7 @@ async function renderRegimeMedia() {
     type: 'line',
     smooth: false,
     symbolSize: 6,
-    data: years.map(y => Math.round(sumGroupYear(g.name, y) / 1e8)),  // 억 단위
+    data: years.map(y => +(sumGroupYear(g.name, y) / 1e8).toFixed(1)),  // 억 단위, 소수 1자리
     itemStyle: { color: g.color },
     lineStyle: { color: g.color, width: 2 },
     emphasis: { focus: 'series' },
@@ -2033,10 +2033,10 @@ async function renderYouTube() {
       axisLabel: { ...AXIS_STYLE.axisLabel, formatter: v => v.toLocaleString('ko-KR') } },
     series: [{
       type: 'bar',
-      data: yt.by_month.map(r => Math.round(r.총액 / 1e8)),
+      data: yt.by_month.map(r => +(r.총액 / 1e8).toFixed(1)),
       itemStyle: { color: '#f78166' },
       label: { show: true, position: 'top', color: getCssVar('--text-muted'), fontSize: 10,
-        formatter: p => p.value > 0 ? p.value : '' },
+        formatter: p => p.value > 0 ? p.value.toFixed(1) : '' },
     }],
   }, true);
 
