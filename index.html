@@ -2544,6 +2544,18 @@ function renderMediaContent() {
     renderMarket();
     setTimeout(() => Object.values(STATE.charts).forEach(c => c.resize()), 50);
 
+    // URL hash가 있으면 해당 탭 활성화 (직접 링크 지원: #regime, #youtube 등)
+    const initialTab = tabFromHash();
+    if (initialTab && initialTab !== 'market') activateTab(initialTab);
+    // 뒤로가기/앞으로가기에서도 동기화
+    window.addEventListener('hashchange', () => {
+      const t = tabFromHash();
+      if (t) {
+        const cur = document.querySelector('.tab.active')?.dataset.tab;
+        if (cur !== t) activateTab(t);
+      }
+    });
+
     // Stage 2: aggregate (17MB, 백그라운드) — 검색·필터 정확도 보강
     loadAggregateBackground();
   } catch (e) {
