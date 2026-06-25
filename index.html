@@ -1521,8 +1521,15 @@ function setupTabs() {
       b.classList.add('active');
       document.getElementById('panel-' + b.dataset.tab).classList.add('active');
       const tab = b.dataset.tab;
-      // URL hash 동기화
-      if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
+      // URL 동기화 — query string으로 (페북·카톡 redirect에서 fragment 잘림 회피)
+      const url = new URL(location.href);
+      if (tab === 'market') url.searchParams.delete('tab');
+      else url.searchParams.set('tab', tab);
+      url.hash = '';  // 기존 hash 정리
+      const newPath = url.pathname + url.search;
+      if (newPath !== location.pathname + location.search) {
+        history.replaceState(null, '', newPath);
+      }
       // 탭으로 돌아갈 때 차트가 dispose 또는 미생성이면 재렌더
       if (tab === 'agency' && STATE.selectedAgency && !STATE.charts['ag-yearly']) {
         renderAgencyContent();
@@ -1620,17 +1627,15 @@ function activateTab(tabName) {
   if (btn) btn.click();
 }
 
-// URL hash ↔ 탭 동기화 (직접 링크 지원)
+// URL ↔ 탭 동기화 (직접 링크 지원). query string 우선(?tab=xxx),
+// 기존 #xxx 형식도 호환. query를 쓰는 이유: 페북·카톡 등 외부 공유 시
+// redirect를 거치면서 fragment(#)가 자주 잘려나가기 때문.
 const VALID_TABS = ['market', 'regime', 'youtube', 'agency', 'media'];
 function tabFromHash() {
+  const p = new URLSearchParams(location.search).get('tab');
+  if (VALID_TABS.includes(p)) return p;
   const h = (location.hash || '').replace('#', '');
   return VALID_TABS.includes(h) ? h : null;
-}
-function syncHashToCurrentTab() {
-  const active = document.querySelector('.tab.active')?.dataset.tab;
-  if (active && location.hash !== '#' + active) {
-    history.replaceState(null, '', '#' + active);
-  }
 }
 
 function navigateToEntity(kind, name) {
@@ -2597,17 +2602,19 @@ function renderMediaContent() {
     renderMarket();
     setTimeout(() => Object.values(STATE.charts).forEach(c => c.resize()), 50);
 
-    // URL hash가 있으면 해당 탭 활성화 (직접 링크 지원: #regime, #youtube 등)
+    // URL에 ?tab= 또는 #xxx 있으면 해당 탭 활성화
     const initialTab = tabFromHash();
     if (initialTab && initialTab !== 'market') activateTab(initialTab);
-    // 뒤로가기/앞으로가기에서도 동기화
-    window.addEventListener('hashchange', () => {
+    // 뒤로가기/앞으로가기 + hash 변경 모두 동기화
+    const onUrlChange = () => {
       const t = tabFromHash();
       if (t) {
         const cur = document.querySelector('.tab.active')?.dataset.tab;
         if (cur !== t) activateTab(t);
       }
-    });
+    };
+    window.addEventListener('hashchange', onUrlChange);
+    window.addEventListener('popstate', onUrlChange);
 
     // Stage 2: aggregate (17MB, 백그라운드) — 검색·필터 정확도 보강
     loadAggregateBackground();
