@@ -594,6 +594,7 @@
   <div class="tabs-inner">
     <button class="tab active" data-tab="market">전체 시장.</button>
     <button class="tab" data-tab="regime">정권별 비교.</button>
+    <button class="tab" data-tab="youtube">유튜브 협찬.</button>
     <button class="tab" data-tab="agency">광고주별 분석.</button>
     <button class="tab" data-tab="media">매체별 분석.</button>
   </div>
@@ -678,6 +679,31 @@
       <p class="chart-sub">매체별 연 단위를 월평균으로 환산. 우측 정권 칼럼은 광고시작일 기준 정확한 임기 구간 평균(문 39개월 / 윤 38개월). 회색 칼럼(2022·2026)은 정권 평균에서 제외.</p>
       <div class="raw-table-wrap" id="table-regime-monthly"></div>
     </div>
+  </section>
+
+  <!-- ===== YOUTUBE TAB ===== -->
+  <section class="panel" id="panel-youtube">
+    <h2 class="section-title">유튜브 협찬 광고.</h2>
+    <p class="chart-sub" style="margin-bottom:20px">한국언론진흥재단 공개 자료 중 인터넷매체·해외매체 유튜브 협찬 광고 세부 내역. 채널/인플루언서명까지 노출됨. (별도 데이터셋)</p>
+    <div class="kpi-grid" id="kpi-youtube" style="margin-bottom:20px;border-radius:8px;overflow:hidden;border:1px solid var(--border)"></div>
+    <div class="grid-2">
+      <div class="card">
+        <h3 class="chart-title">월별 협찬액 추이 (단위: 억 원).</h3>
+        <p class="chart-sub">광고시작일 기준 월별 집계.</p>
+        <div class="chart" id="chart-youtube-monthly"></div>
+      </div>
+      <div class="card">
+        <h3 class="chart-title">광고주(발주 기관) Top 30 (단위: 억 원).</h3>
+        <p class="chart-sub">유튜브 협찬에 가장 많이 집행한 기관. 클릭 시 광고주 분석으로.</p>
+        <div class="chart chart-tall" id="chart-youtube-top-agencies"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="chart-title">채널·인플루언서 Top 50 (단위: 억 원).</h3>
+      <p class="chart-sub">정부광고를 가장 많이 수주한 채널.</p>
+      <div class="chart chart-xtall" id="chart-youtube-top-channels"></div>
+    </div>
+    <div id="detail-youtube"></div>
   </section>
 
   <!-- ===== AGENCY TAB ===== -->
@@ -1066,6 +1092,7 @@ function redrawAllCharts() {
   const tab = activeTab.dataset.tab;
   if (tab === 'market') renderMarket();
   else if (tab === 'regime') renderRegimeMedia();
+  else if (tab === 'youtube') renderYouTube();
   else if (tab === 'agency' && STATE.selectedAgency) renderAgencyContent();
   else if (tab === 'media' && STATE.selectedMedia) renderMediaContent();
 }
@@ -1475,6 +1502,8 @@ function setupTabs() {
         renderMarket();
       } else if (tab === 'regime' && !STATE.charts['chart-regime-media']) {
         renderRegimeMedia();
+      } else if (tab === 'youtube' && !STATE.charts['chart-youtube-monthly']) {
+        renderYouTube();
       } else {
         setTimeout(() => Object.values(STATE.charts).forEach(c => c.resize()), 0);
       }
@@ -1898,6 +1927,89 @@ function renderRegimeTable(rows) {
       renderRegimeTable(rows);
     });
   });
+}
+
+// ============ 유튜브 협찬 (별도 데이터셋, 2024.8~2026.5) ============
+const YOUTUBE_TABLE_COLS = [
+  { key: 0, label: '연월.',           type: 'str', cls: 'muted' },
+  { key: 1, label: '광고시작일.',     type: 'str', cls: '' },
+  { key: 2, label: '광고주.',         type: 'str', cls: '', searchable: true, placeholder: '광고주 검색…', linkTo: 'agency' },
+  { key: 3, label: '채널·인플루언서.', type: 'str', cls: '', searchable: true, placeholder: '채널명 검색…' },
+  { key: 4, label: '광고명.',         type: 'str', cls: 'ad-name', searchable: true, placeholder: '광고명 검색…' },
+  { key: 5, label: '협찬여부.',       type: 'str', cls: 'muted' },
+  { key: 6, label: '광고료.',         type: 'num', cls: 'num' },
+  { key: 7, label: '총액.',           type: 'num', cls: 'num' },
+];
+
+async function renderYouTube() {
+  if (!STATE.youtube) {
+    try {
+      const res = await fetch('data/youtube.json');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      STATE.youtube = await res.json();
+    } catch (e) {
+      console.error('youtube load error', e);
+      document.getElementById('panel-youtube').insertAdjacentHTML('afterbegin',
+        `<div class="placeholder"><div style="color:var(--red)">유튜브 데이터 로드 실패: ${escapeHTML(e.message)}</div></div>`);
+      return;
+    }
+  }
+  const yt = STATE.youtube;
+
+  // KPI
+  const kpis = [
+    { label: '총 협찬액.',   value: fmtKRW(yt.kpi.총액),     unit: '원' },
+    { label: '총 건수.',     value: fmtInt(yt.kpi.총건수),   unit: '건' },
+    { label: '채널 수.',     value: fmtInt(yt.kpi.채널수),   unit: '개' },
+    { label: '광고주 수.',   value: fmtInt(yt.kpi.광고주수), unit: '개' },
+    { label: '기간.',        value: yt.kpi.기간,             unit: '' },
+  ];
+  document.getElementById('kpi-youtube').innerHTML = kpis.map(it => `
+    <div class="kpi">
+      <div class="kpi-label">${it.label}</div>
+      <div class="kpi-value" style="font-size:${it.unit ? '26px' : '18px'}">${it.value}<span class="kpi-unit">${it.unit}</span></div>
+    </div>
+  `).join('');
+
+  // 월별 라인 차트
+  const months = yt.by_month.map(r => r.연월);
+  getChart('chart-youtube-monthly').setOption({
+    ...ECHARTS_BASE,
+    grid: { left: 60, right: 24, top: 24, bottom: 50 },
+    tooltip: { ...TOOLTIP, valueFormatter: v => v.toLocaleString('ko-KR') + '억' },
+    xAxis: { type: 'category', data: months, ...AXIS_STYLE,
+      axisLabel: { ...AXIS_STYLE.axisLabel, rotate: 45 } },
+    yAxis: { type: 'value', ...AXIS_STYLE,
+      axisLabel: { ...AXIS_STYLE.axisLabel, formatter: v => v.toLocaleString('ko-KR') } },
+    series: [{
+      type: 'bar',
+      data: yt.by_month.map(r => Math.round(r.총액 / 1e8)),
+      itemStyle: { color: '#f78166' },
+      label: { show: true, position: 'top', color: getCssVar('--text-muted'), fontSize: 10,
+        formatter: p => p.value > 0 ? p.value : '' },
+    }],
+  }, true);
+
+  // 광고주 Top 30
+  const topAg = yt.top_agencies.slice(0, 30).map(r => ({
+    name: r.기관명, value: r.총액
+  })).reverse();
+  renderHBar('chart-youtube-top-agencies', topAg, '#58a6ff',
+    { unit: 'billion', linkTo: 'agency' });
+
+  // 채널 Top 50
+  const topCh = yt.top_channels.slice(0, 50).map(r => ({
+    name: r.채널명, value: r.총액
+  })).reverse();
+  renderHBar('chart-youtube-top-channels', topCh, '#bc8cff', { unit: 'billion' });
+
+  // raw 테이블
+  const host = document.getElementById('detail-youtube');
+  host.innerHTML = buildRawTableHTML(YOUTUBE_TABLE_COLS,
+    `2024.8 ~ 2026.5 유튜브 협찬 광고 ${fmtInt(yt.rows.length)}건 전체. 광고주·채널·광고명 검색.`);
+  const card = host.lastElementChild;
+  // bindRawTable이 raw 객체 { rows: [...] } 형식 요구 (광고주/매체 detail과 동일)
+  bindRawTable(card, { rows: yt.rows }, YOUTUBE_TABLE_COLS);
 }
 
 // ============ Raw 광고 내역 테이블 ============
