@@ -1640,7 +1640,31 @@ function navigateToEntity(kind, name) {
     }
   } else if (kind === 'mtype' || kind === 'atype') {
     applyMainFilterSingle(kind, name);
+  } else if (kind === 'ytChannel') {
+    filterYouTubeByChannel(name);
   }
+}
+
+// 유튜브 탭의 raw 테이블에서 특정 채널만 필터링
+function filterYouTubeByChannel(channelName) {
+  activateTab('youtube');
+  // detail-youtube 안의 raw 테이블 채널 검색창(data-col="3")에 값 + input 이벤트 발생
+  setTimeout(() => {
+    const input = document.querySelector('#detail-youtube .raw-search[data-col="3"]');
+    if (!input) return;
+    input.value = channelName;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    // 다른 검색창 초기화 (광고주·광고명)
+    document.querySelectorAll('#detail-youtube .raw-search').forEach(i => {
+      if (i !== input) {
+        i.value = '';
+        i.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+    setTimeout(() => {
+      document.querySelector('#detail-youtube .raw-table-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+  }, 100);
 }
 
 function applyMainFilterSingle(kind, value) {
@@ -1960,7 +1984,7 @@ const YOUTUBE_TABLE_COLS = [
   { key: 0, label: '연월.',           type: 'str', cls: 'muted' },
   { key: 1, label: '광고시작일.',     type: 'str', cls: '' },
   { key: 2, label: '광고주.',         type: 'str', cls: '', searchable: true, placeholder: '광고주 검색…', linkTo: 'agency' },
-  { key: 3, label: '채널·인플루언서.', type: 'str', cls: '', searchable: true, placeholder: '채널명 검색…' },
+  { key: 3, label: '채널·인플루언서.', type: 'str', cls: '', searchable: true, placeholder: '채널명 검색…', linkTo: 'ytChannel' },
   { key: 4, label: '광고명.',         type: 'str', cls: 'ad-name', searchable: true, placeholder: '광고명 검색…' },
   { key: 5, label: '협찬여부.',       type: 'str', cls: 'muted' },
   { key: 6, label: '광고료.',         type: 'num', cls: 'num' },
@@ -2023,11 +2047,12 @@ async function renderYouTube() {
   renderHBar('chart-youtube-top-agencies', topAg, '#58a6ff',
     { unit: 'billion', linkTo: 'agency' });
 
-  // 채널 Top 50
+  // 채널 Top 50 (클릭 시 raw 테이블에서 해당 채널만 필터)
   const topCh = yt.top_channels.slice(0, 50).map(r => ({
     name: r.채널명, value: r.총액
   })).reverse();
-  renderHBar('chart-youtube-top-channels', topCh, '#bc8cff', { unit: 'billion' });
+  renderHBar('chart-youtube-top-channels', topCh, '#bc8cff',
+    { unit: 'billion', linkTo: 'ytChannel' });
 
   // raw 테이블
   const host = document.getElementById('detail-youtube');
