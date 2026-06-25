@@ -1493,6 +1493,8 @@ function setupTabs() {
       b.classList.add('active');
       document.getElementById('panel-' + b.dataset.tab).classList.add('active');
       const tab = b.dataset.tab;
+      // URL hash 동기화
+      if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
       // 탭으로 돌아갈 때 차트가 dispose 또는 미생성이면 재렌더
       if (tab === 'agency' && STATE.selectedAgency && !STATE.charts['ag-yearly']) {
         renderAgencyContent();
@@ -1588,6 +1590,19 @@ function escapeHTML(s) {
 function activateTab(tabName) {
   const btn = document.querySelector(`.tab[data-tab="${tabName}"]`);
   if (btn) btn.click();
+}
+
+// URL hash ↔ 탭 동기화 (직접 링크 지원)
+const VALID_TABS = ['market', 'regime', 'youtube', 'agency', 'media'];
+function tabFromHash() {
+  const h = (location.hash || '').replace('#', '');
+  return VALID_TABS.includes(h) ? h : null;
+}
+function syncHashToCurrentTab() {
+  const active = document.querySelector('.tab.active')?.dataset.tab;
+  if (active && location.hash !== '#' + active) {
+    history.replaceState(null, '', '#' + active);
+  }
 }
 
 function navigateToEntity(kind, name) {
