@@ -1,1 +1,1 @@
-{"name":"S.Economy","type":"인터넷","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2019,"공공기관","한국토지주택공사","7월 온라인광고",1500000,1650000],[2019,"공공기관","한국토지주택공사","지금 찾아갑니다",1500000,1650000]]}
+{"name":"Poland Weekly","type":"해외","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2023,"지방공기업","대구경북경제자유구역청","2023 폴란드 언론매체 광고",4311072,4785290]]}

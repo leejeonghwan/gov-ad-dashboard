@@ -1,1 +1,1 @@
-{"name":"MAN","type":"인터넷","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2023,"공공기관","한국관광공사","2023 스마트관광도시 온라인 이벤트 미디어 운영",11000000,12100000],[2020,"공공기관","농림수산식품교육문화정보원","사회적농업 인턴십 프로그램 모집 홍보",2909091,3200000]]}
+{"name":"Lao National Television","type":"해외","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2024,"기타기관","국가유산진흥원","라오스 문화유산ODA 홍보영상 라오스 국영방송(LNTV) 상영",1444000,1588400]]}

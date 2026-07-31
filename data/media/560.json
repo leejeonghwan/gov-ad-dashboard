@@ -1,1 +1,1 @@
-{"name":"Caixin Weekly","type":"해외","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2020,"공공기관","한국가스공사","2020년 2월 연합광고(해외)",2200000,2420000]]}
+{"name":"CPBC-FM(본사)","type":"방송","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2026,"공공기관","창업진흥원","대국민 창업분위기 확산 홍보",3795000,3795000],[2026,"국가행정기관","국가데이터처","2026년 사회통계 대국민 홍보(MBC-R)",2277000,2277000]]}

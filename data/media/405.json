@@ -1,1 +1,1 @@
-{"name":"Benzinga","type":"해외","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2020,"특별법인","(재)서울경제진흥원","서울글로벌챌린지TF팀 해외매체 광고",2200000,2420000]]}
+{"name":"BTV-VOD 본사","type":"방송","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2020,"공공기관","대한적십자사혈액관리본부","긴급헌혈증진 홍보캠페인(IPTV,OTT)",40000000,44000000]]}

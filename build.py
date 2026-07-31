@@ -9,7 +9,7 @@
 
 입력:
     ~/Downloads/adfile/2019~2025 ... .xlsx (7개)
-    ~/Downloads/2026년도_정부광고집행내역_260430 기준.xlsx (1개)
+    ~/Downloads/2026년도_정부광고집행내역_260731 기준.xlsx (1개)
 
 출력:
     data/overview.json
@@ -29,7 +29,7 @@ import pandas as pd
 HOME = Path.home()
 ADFILE_DIR = HOME / "Downloads" / "adfile"
 EXTRA_FILES = [
-    HOME / "Downloads" / "2026년도_정부광고집행내역_260430 기준.xlsx",
+    HOME / "Downloads" / "2026년도_정부광고집행내역_260731 기준.xlsx",
 ]
 OUT_DIR = Path(__file__).resolve().parent / "data"
 OUT_DIR.mkdir(parents=True, exist_ok=True)

@@ -1,1 +1,1 @@
-{"name":"더바이크","type":"인터넷","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2020,"지방공기업","안산도시공사","9월 광고",1000000,1100000]]}
+{"name":"대한언론인회(팜플렛/리플렛/단행본)","type":"인쇄","schema":["year","agency_type","agency","ad","ad_fee","total"],"rows":[[2020,"지방행정기관","양구군청","양구시티투어 홍보",3000000,3300000]]}
