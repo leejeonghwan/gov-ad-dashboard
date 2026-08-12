@@ -2087,7 +2087,7 @@ async function renderYouTube() {
 
 // ============ Raw 광고 내역 테이블 ============
 const AGENCY_TABLE_COLS = [
-  { key: 0, label: '연도.',           type: 'num', cls: '' },
+  { key: 0, label: '연도.',           type: 'str', cls: '' },
   { key: 1, label: '매체구분.',       type: 'str', cls: 'muted', linkTo: 'mtype' },
   { key: 2, label: '매체명.',         type: 'str', cls: '', searchable: true, placeholder: '매체명 검색…', linkTo: 'media' },
   { key: 3, label: '광고명.',         type: 'str', cls: 'ad-name', searchable: true, placeholder: '광고명 검색…' },
@@ -2095,7 +2095,7 @@ const AGENCY_TABLE_COLS = [
   { key: 5, label: '총액(VAT포함).',  type: 'num', cls: 'num' },
 ];
 const MEDIA_TABLE_COLS = [
-  { key: 0, label: '연도.',           type: 'num', cls: '' },
+  { key: 0, label: '연도.',           type: 'str', cls: '' },
   { key: 1, label: '기관분류.',       type: 'str', cls: 'muted', linkTo: 'atype' },
   { key: 2, label: '기관명.',         type: 'str', cls: '', searchable: true, placeholder: '기관명 검색…', linkTo: 'agency' },
   { key: 3, label: '광고명.',         type: 'str', cls: 'ad-name', searchable: true, placeholder: '광고명 검색…' },
