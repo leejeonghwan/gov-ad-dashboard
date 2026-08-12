@@ -677,7 +677,7 @@
     <h2 class="section-title">정권별 매체 비교.</h2>
     <div class="card">
       <h3 class="chart-title">정권별 주요 매체 광고 집행 추이 (단위: 억 원).</h3>
-      <p class="chart-sub">2022년 5월 윤석열 정부 출범. 범례 클릭으로 매체별 표시/숨김. 2026은 부분 데이터(3월까지)라 차트에서 제외.</p>
+      <p class="chart-sub">2022년 5월 윤석열 정부 출범. 범례 클릭으로 매체별 표시/숨김. 2026은 부분 데이터(6월까지)라 차트에서 제외.</p>
       <div class="chart chart-tall" id="chart-regime-media"></div>
     </div>
     <div class="card">
@@ -1873,7 +1873,7 @@ async function renderRegimeMedia() {
 // ===== 연도별 월평균 표 (정권 칼럼 그룹, 월 단위 정확) =====
 function renderRegimeMonthlyTable() {
   const transitionYears = new Set([2022, 2026]);
-  // 연도별 월수 (2026은 1-3월 분, 나머지는 12개월)
+  // 연도별 월수 (2026은 1-6월 분, 나머지는 12개월)
   const monthsInYear = y => (y === 2026 ? 3 : 12);
   const yearsOrder = [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
